@@ -89,20 +89,22 @@ export function SearchBar({
       );
 
   // Initialize recent searches from localStorage
-  const [recentSearches, setRecentSearches] = useState<SearchSuggestion[]>(() => {
-    if (typeof window === 'undefined') return [];
-    
+  const [recentSearches, setRecentSearches] = useState<SearchSuggestion[]>([]);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // Load recent searches after hydration
+  useEffect(() => {
     const stored = localStorage.getItem('room-finder-recent-searches');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        return parsed.slice(0, 3); // Show max 3 recent searches
+        setRecentSearches(parsed.slice(0, 3)); // Show max 3 recent searches
       } catch {
         // Invalid JSON, ignore
       }
     }
-    return [];
-  });
+    setIsHydrated(true);
+  }, []);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -320,7 +322,7 @@ export function SearchBar({
         <Card className="absolute top-full left-0 right-0 z-50 mt-2 max-h-96 overflow-y-auto">
           <CardContent className="p-0">
             {/* Recent Searches */}
-            {recentSearches.length > 0 && (
+            {isHydrated && recentSearches.length > 0 && (
               <div className="py-2">
                 <div className="px-4 py-2 flex items-center justify-between">
                   <div className="flex items-center space-x-2">

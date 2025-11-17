@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withErrorHandling, successResponse, getPaginationParams, paginatedResponse } from '@/lib/api-utils';
+import { withErrorHandling, successResponse, getPaginationParams, paginatedSuccessResponse } from '@/lib/api-utils';
 import { searchSchema } from '@/lib/validations';
 import { Prisma } from '@prisma/client';
 
@@ -133,7 +133,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     filteredListings = listingsWithDistance;
   }
 
-  return successResponse(paginatedResponse(filteredListings, total, page, limit));
+  return paginatedSuccessResponse(filteredListings, total, page, limit);
 });
 
 // GET /api/search/suggestions - Get search suggestions

@@ -51,11 +51,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased min-h-screen bg-background`}>
+      <body className={`${inter.variable} font-sans antialiased min-h-screen bg-gradient-to-br from-background via-background to-muted/20`} suppressHydrationWarning>
         <Providers>
           <div className="relative min-h-screen flex flex-col">
             <Navbar />
-            <main className="flex-1">
+            <main className="flex-1 relative">
+              <div className="absolute inset-0 bg-grid-pattern opacity-5 pointer-events-none" />
               {children}
             </main>
             <Footer />

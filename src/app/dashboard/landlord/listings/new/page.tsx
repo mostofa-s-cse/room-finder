@@ -8,17 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Upload, 
   X, 
-  MapPin, 
   DollarSign, 
   Home, 
-  Calendar,
   Check,
   Plus,
   Image as ImageIcon
@@ -177,7 +173,8 @@ export default function NewListingPage() {
       });
 
       if (response.ok) {
-        const listing = await response.json();
+        const data = await response.json();
+        const listing = data.data || data;
         toast.success('Listing created successfully!');
         // Redirect to listing page
         window.location.href = `/rooms/${listing.id}`;

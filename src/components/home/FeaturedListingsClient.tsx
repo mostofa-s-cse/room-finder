@@ -36,10 +36,18 @@ export function FeaturedListingsClient() {
         const res = await fetch('/api/listings?limit=6&featured=true');
         if (res.ok) {
           const data = await res.json();
-          setListings(data.data || []);
+          // Ensure we always set an array, even if the API response structure is unexpected
+          const listingsData = Array.isArray(data.data) ? data.data : 
+                               Array.isArray(data) ? data : 
+                               Array.isArray(data.listings) ? data.listings : [];
+          setListings(listingsData);
+        } else {
+          console.error('Failed to fetch listings:', res.status, res.statusText);
+          setListings([]);
         }
       } catch (error) {
         console.error('Error fetching featured listings:', error);
+        setListings([]);
       } finally {
         setLoading(false);
       }
@@ -92,7 +100,7 @@ export function FeaturedListingsClient() {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {listings.map((listing) => (
+          {Array.isArray(listings) && listings.map((listing) => (
             <ListingCard key={listing.id} listing={listing} />
           ))}
         </div>

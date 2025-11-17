@@ -54,6 +54,29 @@ export function successResponse<T>(data: T, statusCode: number = 200): NextRespo
   return NextResponse.json({ data }, { status: statusCode });
 }
 
+// Success response helper for paginated data (avoids double wrapping)
+export function paginatedSuccessResponse<T>(
+  data: T[],
+  total: number,
+  page: number,
+  limit: number,
+  statusCode: number = 200
+): NextResponse {
+  const totalPages = Math.ceil(total / limit);
+  
+  return NextResponse.json({
+    data,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrevious: page > 1,
+    },
+  }, { status: statusCode });
+}
+
 // Authentication middleware
 export async function requireAuth(request: NextRequest, allowedRoles?: UserRole[]) {
   const session = await getServerSession(authOptions);

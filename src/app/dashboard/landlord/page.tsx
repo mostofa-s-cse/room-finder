@@ -117,10 +117,22 @@ export default function LandlordDashboard() {
         fetch('/api/analytics/landlord')
       ]);
 
-      if (profileRes.ok) setProfile(await profileRes.json());
-      if (listingsRes.ok) setListings(await listingsRes.json());
-      if (bookingsRes.ok) setBookings(await bookingsRes.json());
-      if (analyticsRes.ok) setAnalytics(await analyticsRes.json());
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        setProfile(profileData.data || profileData);
+      }
+      if (listingsRes.ok) {
+        const listingsData = await listingsRes.json();
+        setListings(Array.isArray(listingsData.data) ? listingsData.data : Array.isArray(listingsData) ? listingsData : []);
+      }
+      if (bookingsRes.ok) {
+        const bookingsData = await bookingsRes.json();
+        setBookings(Array.isArray(bookingsData.data) ? bookingsData.data : Array.isArray(bookingsData) ? bookingsData : []);
+      }
+      if (analyticsRes.ok) {
+        const analyticsData = await analyticsRes.json();
+        setAnalytics(analyticsData.data || analyticsData);
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -299,11 +311,11 @@ export default function LandlordDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {bookings.slice(0, 5).map((booking) => (
+                  {Array.isArray(bookings) && bookings.slice(0, 5).map((booking) => (
                     <div key={booking.id} className="flex items-center space-x-4 p-4 border rounded-lg">
                       <Avatar>
                         <AvatarImage src={booking.bachelor.profilePicture} />
-                        <AvatarFallback>{booking.bachelor.name.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{booking.bachelor.name?.charAt(0) || 'B'}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
@@ -316,7 +328,7 @@ export default function LandlordDashboard() {
                           {booking.listing.title}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          ৳{booking.totalAmount.toLocaleString()}
+                          ৳{booking.totalAmount ? booking.totalAmount.toLocaleString() : 'N/A'}
                         </p>
                       </div>
                     </div>
@@ -352,7 +364,7 @@ export default function LandlordDashboard() {
             </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {listings.map((listing) => (
+            {Array.isArray(listings) && listings.map((listing) => (
               <Card key={listing.id} className="relative">
                 <CardContent className="p-0">
                   <div className="relative">
@@ -382,7 +394,7 @@ export default function LandlordDashboard() {
                       </p>
                     </div>
                     <div className="flex justify-between items-center">
-                      <div className="text-lg font-bold">৳{listing.rent.toLocaleString()}</div>
+                      <div className="text-lg font-bold">৳{listing.rent ? listing.rent.toLocaleString() : 'N/A'}</div>
                       <Badge variant="outline">{listing.roomType}</Badge>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-center text-sm">
@@ -441,14 +453,14 @@ export default function LandlordDashboard() {
             </div>
           </div>
           <div className="space-y-4">
-            {bookings.map((booking) => (
+            {Array.isArray(bookings) && bookings.map((booking) => (
               <Card key={booking.id}>
                 <CardContent className="p-6">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center space-x-4">
                       <Avatar className="h-12 w-12">
                         <AvatarImage src={booking.bachelor.profilePicture} />
-                        <AvatarFallback>{booking.bachelor.name.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{booking.bachelor.name?.charAt(0) || 'B'}</AvatarFallback>
                       </Avatar>
                       <div>
                         <h3 className="font-semibold">{booking.bachelor.name}</h3>
@@ -469,7 +481,7 @@ export default function LandlordDashboard() {
                         {booking.status}
                       </Badge>
                       <p className="text-lg font-semibold mt-2">
-                        ৳{booking.totalAmount.toLocaleString()}
+                        ৳{booking.totalAmount ? booking.totalAmount.toLocaleString() : 'N/A'}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
@@ -577,7 +589,7 @@ export default function LandlordDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {listings.slice(0, 5).map((listing) => (
+                {Array.isArray(listings) && listings.slice(0, 5).map((listing) => (
                   <div key={listing.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-4">
                       {listing.images.length > 0 ? (

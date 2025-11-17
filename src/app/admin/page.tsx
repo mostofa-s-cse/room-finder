@@ -272,7 +272,7 @@ export default function AdminDashboard() {
                 <CardDescription>Latest platform activities requiring attention</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {listings.filter(l => l.status === 'PENDING').slice(0, 3).map((listing) => (
+                {Array.isArray(listings) && listings.filter(l => l.status === 'PENDING').slice(0, 3).map((listing) => (
                   <div key={listing.id} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
@@ -458,7 +458,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {listings.map((listing) => (
+                    {Array.isArray(listings) && listings.map((listing) => (
                       <tr key={listing.id} className="border-b">
                         <td className="p-4">
                           <div>
@@ -475,7 +475,7 @@ export default function AdminDashboard() {
                             {listing.status}
                           </Badge>
                         </td>
-                        <td className="p-4 font-medium">৳{listing.monthlyRent.toLocaleString()}</td>
+                        <td className="p-4 font-medium">৳{listing.monthlyRent ? listing.monthlyRent.toLocaleString() : 'N/A'}</td>
                         <td className="p-4">
                           {listing.reportCount ? (
                             <Badge variant="destructive" className="text-xs">

@@ -267,17 +267,20 @@ function SigninContent() {
             {/* Demo Accounts */}
             <div className="mt-6 pt-6 border-t">
               <p className="text-center text-sm text-gray-600 mb-4">
-                Demo Accounts (Development Only)
+                🔑 Test Credentials (Development Only)
               </p>
               <div className="grid grid-cols-1 gap-2 text-xs">
-                <div className="p-2 bg-gray-50 rounded">
-                  <strong>Bachelor:</strong> bachelor@demo.com / password123
+                <div className="p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border border-blue-200">
+                  <strong className="text-blue-700">Bachelor:</strong> 
+                  <span className="ml-2 font-mono">ahmed@example.com / bachelor123</span>
                 </div>
-                <div className="p-2 bg-gray-50 rounded">
-                  <strong>Landlord:</strong> landlord@demo.com / password123
+                <div className="p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                  <strong className="text-green-700">Landlord:</strong> 
+                  <span className="ml-2 font-mono">karim@example.com / landlord123</span>
                 </div>
-                <div className="p-2 bg-gray-50 rounded">
-                  <strong>Admin:</strong> admin@demo.com / password123
+                <div className="p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                  <strong className="text-purple-700">Admin:</strong> 
+                  <span className="ml-2 font-mono">admin@roomfinder.com / admin123</span>
                 </div>
               </div>
             </div>

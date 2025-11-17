@@ -111,15 +111,17 @@ function SearchContent() {
       }
 
       const data = await response.json();
-      setListings(data.data || []);
+      // Handle API response structure: { data: [...], pagination: {...} }
+      const listingsData = data.data || data.listings || [];
+      setListings(Array.isArray(listingsData) ? listingsData : []);
       setTotalPages(data.pagination?.totalPages || 1);
       setTotalResults(data.pagination?.total || 0);
       
       // Update map center if we have results with coordinates
-      if (data.data && data.data.length > 0 && data.data[0].lat && data.data[0].lng) {
+      if (listingsData && listingsData.length > 0 && listingsData[0].lat && listingsData[0].lng) {
         setMapCenter({ 
-          lat: data.data[0].lat, 
-          lng: data.data[0].lng 
+          lat: listingsData[0].lat, 
+          lng: listingsData[0].lng 
         });
       }
     } catch (err) {
@@ -374,18 +376,24 @@ function SearchContent() {
               </div>
             ) : (
               <>
-                <div className={cn(
-                  viewMode === 'grid' 
-                    ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6'
-                    : 'space-y-4'
-                )}>
-                  {listings.map((listing) => (
-                    <ListingCard 
-                      key={listing.id} 
-                      listing={listing}
-                    />
-                  ))}
-                </div>
+                {Array.isArray(listings) && listings.length > 0 ? (
+                  <div className={cn(
+                    viewMode === 'grid' 
+                      ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6'
+                      : 'space-y-4'
+                  )}>
+                    {listings.map((listing) => (
+                      <ListingCard 
+                        key={listing.id} 
+                        listing={listing}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">No listings found. Try adjusting your search criteria.</p>
+                  </div>
+                )}
 
                 {/* Pagination */}
                 {totalPages > 1 && (

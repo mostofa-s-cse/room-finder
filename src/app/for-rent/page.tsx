@@ -84,7 +84,8 @@ function ForRentContent() {
       }
 
       const data = await response.json();
-      setListings(data.data || []);
+      const listingsData = data.data || data.listings || [];
+      setListings(Array.isArray(listingsData) ? listingsData : []);
       setTotalPages(data.pagination?.totalPages || 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -299,18 +300,24 @@ function ForRentContent() {
               </div>
             ) : (
               <>
-                <div className={cn(
-                  viewMode === 'grid' 
-                    ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6'
-                    : 'space-y-4'
-                )}>
-                  {listings.map((listing) => (
-                    <ListingCard 
-                      key={listing.id} 
-                      listing={listing}
-                    />
-                  ))}
-                </div>
+                {Array.isArray(listings) && listings.length > 0 ? (
+                  <div className={cn(
+                    viewMode === 'grid' 
+                      ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6'
+                      : 'space-y-4'
+                  )}>
+                    {listings.map((listing) => (
+                      <ListingCard 
+                        key={listing.id} 
+                        listing={listing}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground">No listings found. Try adjusting your filters.</p>
+                  </div>
+                )}
 
                 {/* Pagination */}
                 {totalPages > 1 && (

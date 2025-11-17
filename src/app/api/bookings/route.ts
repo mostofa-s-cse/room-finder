@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withErrorHandling, successResponse, requireAuth, ApiErrorClass, getPaginationParams, paginatedResponse } from '@/lib/api-utils';
+import { withErrorHandling, successResponse, requireAuth, ApiErrorClass, getPaginationParams, paginatedSuccessResponse } from '@/lib/api-utils';
 import { bookingSchema } from '@/lib/validations';
 import { UserRole, BookingStatus, Prisma } from '@prisma/client';
 
@@ -46,7 +46,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.booking.count({ where }),
   ]);
 
-  return successResponse(paginatedResponse(bookings, total, page, limit));
+  return paginatedSuccessResponse(bookings, total, page, limit);
 });
 
 // POST /api/bookings - Create new booking (bachelors only)

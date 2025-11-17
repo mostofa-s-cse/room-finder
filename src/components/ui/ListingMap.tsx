@@ -63,14 +63,14 @@ export function ListingMap({
 
   // Convert listings to map markers
   const markers: MapMarker[] = useMemo(() => {
-    const listingMarkers = listings.map(listing => ({
+    const listingMarkers = Array.isArray(listings) ? listings.map(listing => ({
       id: listing.id,
       position: { lat: listing.latitude, lng: listing.longitude },
       title: listing.title,
       description: `${formatPrice(listing.rent)}/month • ${listing.roomType.replace('_', ' ')}`,
       type: 'listing' as const,
       data: listing
-    }));
+    })) : [];
 
     // Add user location marker if provided
     if (userLocation) {
@@ -108,20 +108,20 @@ export function ListingMap({
     if (!showHeatmap) return [];
     
     return HeatmapGenerator.generateListingHeatmap(
-      listings.map(listing => ({
+      Array.isArray(listings) ? listings.map(listing => ({
         location: { lat: listing.latitude, lng: listing.longitude },
         rent: listing.rent
-      }))
+      })) : []
     );
   }, [listings, showHeatmap]);
 
   // Calculate map center
   const mapCenter = useMemo(() => {
     if (center) return center;
-    if (listings.length === 0) return { lat: 23.8103, lng: 90.4125 }; // Dhaka default
+    if (!Array.isArray(listings) || listings.length === 0) return { lat: 23.8103, lng: 90.4125 }; // Dhaka default
     
     const bounds = DistanceCalculator.calculateBounds(
-      listings.map(listing => ({ lat: listing.latitude, lng: listing.longitude }))
+      Array.isArray(listings) ? listings.map(listing => ({ lat: listing.latitude, lng: listing.longitude })) : []
     );
     
     return {
@@ -136,10 +136,10 @@ export function ListingMap({
     
     return DistanceCalculator.calculateDistancesToPoints(
       userLocation,
-      listings.map(listing => ({
+      Array.isArray(listings) ? listings.map(listing => ({
         id: listing.id,
         location: { lat: listing.latitude, lng: listing.longitude }
-      }))
+      })) : []
     ).map(item => {
       const listing = listings.find(l => l.id === item.id)!;
       return { ...listing, distance: item.distance };

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withErrorHandling, successResponse, requireAuth, ApiErrorClass, getPaginationParams, paginatedResponse } from '@/lib/api-utils';
+import { withErrorHandling, successResponse, requireAuth, ApiErrorClass, getPaginationParams, paginatedSuccessResponse } from '@/lib/api-utils';
 import { createChatThreadSchema } from '@/lib/validations';
 import { UserRole, Prisma } from '@prisma/client';
 
@@ -68,7 +68,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.chatThread.count({ where }),
   ]);
 
-  return successResponse(paginatedResponse(threads, total, page, limit));
+  return paginatedSuccessResponse(threads, total, page, limit);
 });
 
 // POST /api/chat/threads - Create new chat thread

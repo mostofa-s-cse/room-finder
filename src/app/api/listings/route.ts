@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withErrorHandling, successResponse, requireAuth, getPaginationParams, paginatedResponse } from '@/lib/api-utils';
+import { withErrorHandling, successResponse, requireAuth, getPaginationParams, paginatedSuccessResponse } from '@/lib/api-utils';
 import { listingSchema } from '@/lib/validations';
 import { Prisma } from '@prisma/client';
 import { UserRole } from '@prisma/client';
@@ -77,7 +77,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       })
     : allListings;
 
-  return successResponse(paginatedResponse(listings, total, page, limit));
+  return paginatedSuccessResponse(listings, total, page, limit);
 });
 
 // POST /api/listings - Create new listing (landlords only)

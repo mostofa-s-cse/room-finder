@@ -137,9 +137,10 @@ export default function ProfileEditPage() {
       const response = await fetch('/api/users/profile');
       if (response.ok) {
         const data = await response.json();
-        setProfile(data);
-        setSelectedAreas(data.preferences?.preferredAreas || []);
-        setSelectedAmenities(data.preferences?.requiredAmenities || []);
+        const profileData = data.data || data;
+        setProfile(profileData);
+        setSelectedAreas(profileData.preferences?.preferredAreas || []);
+        setSelectedAmenities(profileData.preferences?.requiredAmenities || []);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -191,7 +192,7 @@ export default function ProfileEditPage() {
 
     if (!profile?.phone?.trim()) {
       newErrors.phone = 'Phone number is required';
-    } else if (!/^\+?[0-9]{10,15}$/.test(profile.phone.replace(/\s/g, ''))) {
+    } else if (profile.phone && !/^\+?[0-9]{10,15}$/.test(profile.phone.replace(/\s/g, ''))) {
       newErrors.phone = 'Please enter a valid phone number';
     }
 
@@ -293,7 +294,7 @@ export default function ProfileEditPage() {
                 <Avatar className="h-20 w-20">
                   <AvatarImage src={profile.profilePicture} />
                   <AvatarFallback className="text-lg">
-                    {profile.name.charAt(0).toUpperCase()}
+                    {profile.name?.charAt(0)?.toUpperCase() || 'U'}
                   </AvatarFallback>
                 </Avatar>
                 <div>
@@ -312,7 +313,7 @@ export default function ProfileEditPage() {
                   <Label htmlFor="name">Full Name *</Label>
                   <Input
                     id="name"
-                    value={profile.name}
+                    value={profile.name || ''}
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     className={errors.name ? 'border-red-500' : ''}
                   />
@@ -326,7 +327,7 @@ export default function ProfileEditPage() {
                   <Input
                     id="email"
                     type="email"
-                    value={profile.email}
+                    value={profile.email || ''}
                     disabled
                     className="bg-muted"
                   />

@@ -167,7 +167,9 @@ export function ListingCard({ listing, className = "" }: ListingCardProps) {
             </div>
           </div>
           <div className="text-right ml-2">
-            <div className="text-2xl font-bold">৳{listing.rent.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              ৳{listing.rent ? listing.rent.toLocaleString() : 'Contact for price'}
+            </div>
             <div className="text-sm text-muted-foreground">per month</div>
           </div>
         </div>
@@ -205,7 +207,7 @@ export function ListingCard({ listing, className = "" }: ListingCardProps) {
                 />
               ) : (
                 <span className="text-xs font-medium">
-                  {listing.landlord.name.charAt(0).toUpperCase()}
+                  {listing.landlord.name?.charAt(0)?.toUpperCase() || 'L'}
                 </span>
               )}
             </div>

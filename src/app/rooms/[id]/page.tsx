@@ -295,7 +295,7 @@ export default function RoomDetailsPage() {
                   
                   <div className="text-right">
                     <div className="text-2xl md:text-3xl font-bold text-blue-600">
-                      ৳{listing.price.toLocaleString()}
+                      ৳{listing.price ? listing.price.toLocaleString() : 'Contact for price'}
                       <span className="text-sm text-gray-600 font-normal">/month</span>
                     </div>
                     {listing.avgRating > 0 && (
@@ -391,13 +391,13 @@ export default function RoomDetailsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {listing.reviews.slice(0, 5).map((review) => (
+                    {Array.isArray(listing.reviews) && listing.reviews.slice(0, 5).map((review) => (
                       <div key={review.id} className="border-b pb-4">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center">
                             <Avatar className="h-8 w-8 mr-3">
                               <AvatarFallback>
-                                {review.author.name.charAt(0).toUpperCase()}
+                                {review.author.name?.charAt(0)?.toUpperCase() || 'U'}
                               </AvatarFallback>
                             </Avatar>
                             <div>
@@ -425,7 +425,7 @@ export default function RoomDetailsPage() {
               <CardHeader>
                 <CardTitle className="text-lg">Book This Room</CardTitle>
                 <CardDescription>
-                  Security Deposit: ৳{listing.securityDeposit.toLocaleString()}
+                  Security Deposit: ৳{listing.securityDeposit ? listing.securityDeposit.toLocaleString() : 'Contact for details'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -477,7 +477,7 @@ export default function RoomDetailsPage() {
                   <Avatar>
                     <AvatarImage src={listing.landlord.avatar} />
                     <AvatarFallback>
-                      {listing.landlord.name.charAt(0).toUpperCase()}
+                      {listing.landlord.name?.charAt(0)?.toUpperCase() || 'L'}
                     </AvatarFallback>
                   </Avatar>
                   <div>

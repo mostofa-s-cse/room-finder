@@ -39,7 +39,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     prisma.review.count({ where }),
   ]);
 
-  return successResponse(paginatedResponse(reviews, total, page, limit));
+  return paginatedSuccessResponse(reviews, total, page, limit);
 });
 
 // POST /api/reviews - Create new review (bachelors only)

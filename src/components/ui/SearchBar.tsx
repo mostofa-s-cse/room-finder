@@ -57,36 +57,39 @@ export function SearchBar({
   };
 
   return (
-    <div className={`flex flex-col sm:flex-row gap-2 w-full max-w-2xl ${className}`}>
-      <div className="flex-1 relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+    <div className={`flex flex-col sm:flex-row gap-3 w-full max-w-4xl ${className}`}>
+      <div className="flex-1 relative group">
+        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5 transition-colors group-focus-within:text-primary" />
         <Input
           type="text"
           placeholder={placeholder}
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
           onKeyPress={handleKeyPress}
-          className="pl-10"
+          className="pl-12 pr-4 py-3 text-base bg-white/80 backdrop-blur-sm border-2 border-gray-200 rounded-xl focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 shadow-sm hover:shadow-md"
         />
       </div>
       
       {showLocationSearch && (
-        <div className="flex-1 relative">
-          <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+        <div className="flex-1 relative group">
+          <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5 transition-colors group-focus-within:text-primary" />
           <Input
             type="text"
-            placeholder="Location"
+            placeholder="Location (e.g., Dhaka, Chittagong)"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="pl-10"
+            className="pl-12 pr-4 py-3 text-base bg-white/80 backdrop-blur-sm border-2 border-gray-200 rounded-xl focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 shadow-sm hover:shadow-md"
           />
         </div>
       )}
       
-      <Button onClick={handleSearch} className="px-6">
-        <Search className="h-4 w-4 mr-2" />
-        Search
+      <Button 
+        onClick={handleSearch} 
+        className="px-8 py-3 text-base font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 active:scale-95"
+      >
+        <Search className="h-5 w-5 mr-2" />
+        Search Rooms
       </Button>
     </div>
   );

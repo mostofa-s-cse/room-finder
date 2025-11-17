@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +24,9 @@ import {
   Bell
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { redirect } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 interface Listing {
   id: string;
@@ -85,23 +87,142 @@ interface Booking {
 
 interface ChatThread {
   id: string;
-  landlordName: string;
+  // Real API structure from Prisma
+  participants: Array<{
+    user: {
+      id: string;
+      name: string;
+    };
+  }>;
+  messages: Array<{
+    content: string;
+    createdAt: string;
+    sender: {
+      user: {
+        id: string;
+        name: string;
+      };
+    };
+  }>;
+  listing?: {
+    id: string;
+    title: string;
+    price: number;
+  };
+  lastMessageAt: string;
+  _count: {
+    messages: number;
+  };
+  // Derived properties for display
+  landlordName?: string;
   landlordAvatar?: string;
-  lastMessage: string;
-  lastMessageTime: string;
-  unreadCount: number;
-  listingTitle: string;
+  lastMessage?: string;
+  lastMessageTime?: string;
+  unreadCount?: number;
+  listingTitle?: string;
 }
 
 export default function BachelorDashboard() {
   const { data: session, status } = useSession();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<BachelorProfile | null>(null);
-  const [recommendations, setRecommendations] = useState([]);
-  const [favorites, setFavorites] = useState([]);
+  const [recommendations, setRecommendations] = useState<Listing[]>([]);
+  const [favorites, setFavorites] = useState<Listing[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Transform real API chat data to display format
+  const transformChatThreads = (threads: ChatThread[], currentUserId: string): ChatThread[] => {
+    return threads.map(thread => {
+      // Find the other participant (not current user)
+      const otherParticipant = thread.participants?.find(
+        (p) => p.user.id !== currentUserId
+      );
+      
+      // Get the last message
+      const lastMessage = thread.messages?.[0];
+      
+      return {
+        ...thread,
+        landlordName: otherParticipant?.user.name || 'Unknown User',
+        landlordAvatar: '',
+        lastMessage: lastMessage?.content || 'No messages yet',
+        lastMessageTime: lastMessage?.createdAt || thread.lastMessageAt,
+        unreadCount: 0, // TODO: Calculate actual unread count
+        listingTitle: thread.listing?.title || 'Property Discussion'
+      };
+    });
+  };
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const [profileRes, recommendationsRes, favoritesRes, bookingsRes] = await Promise.all([
+        fetch('/api/users/profile'),
+        fetch('/api/listings/recommendations'),
+        fetch('/api/users/favorites'),
+        fetch('/api/bookings')
+      ]);
+
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        setProfile(profileData.data || profileData);
+      } else {
+        console.error('Failed to fetch profile data');
+        setProfile(null);
+      }
+      if (recommendationsRes.ok) {
+        const recommendationsResponse = await recommendationsRes.json();
+        const recommendationsData = recommendationsResponse.data || recommendationsResponse;
+        setRecommendations(Array.isArray(recommendationsData) ? recommendationsData : []);
+      } else {
+        console.error('Failed to fetch recommendations');
+        setRecommendations([]);
+      }
+      if (favoritesRes.ok) {
+        const favoritesResponse = await favoritesRes.json();
+        const favoritesData = favoritesResponse.data || favoritesResponse;
+        setFavorites(Array.isArray(favoritesData) ? favoritesData : []);
+      } else {
+        console.error('Failed to fetch favorites');
+        setFavorites([]);
+      }
+      if (bookingsRes.ok) {
+        const bookingsResponse = await bookingsRes.json();
+        const bookingsData = bookingsResponse.data || bookingsResponse;
+        setBookings(Array.isArray(bookingsData) ? bookingsData : []);
+      } else {
+        console.error('Failed to fetch bookings');
+        setBookings([]);
+      }
+      // Fetch real chat threads data
+      try {
+        const chatRes = await fetch('/api/chat/threads');
+        if (chatRes.ok) {
+          const chatResponse = await chatRes.json();
+          const chatData = chatResponse.data || chatResponse;
+          if (Array.isArray(chatData) && session?.user?.id) {
+            const transformedThreads = transformChatThreads(chatData, session.user.id);
+            setChatThreads(transformedThreads);
+          } else {
+            setChatThreads([]);
+          }
+        } else {
+          console.error('Failed to fetch chat threads');
+          setChatThreads([]);
+        }
+      } catch (error) {
+        console.error('Error fetching chat threads:', error);
+        setChatThreads([]);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -109,30 +230,13 @@ export default function BachelorDashboard() {
       redirect('/auth/signin');
     }
     fetchDashboardData();
-  }, [session, status]);
 
-  const fetchDashboardData = async () => {
-    try {
-      setIsLoading(true);
-      const [profileRes, recommendationsRes, favoritesRes, bookingsRes, chatRes] = await Promise.all([
-        fetch('/api/users/profile'),
-        fetch('/api/listings/recommendations'),
-        fetch('/api/users/favorites'),
-        fetch('/api/bookings'),
-        fetch('/api/chat/threads')
-      ]);
-
-      if (profileRes.ok) setProfile(await profileRes.json());
-      if (recommendationsRes.ok) setRecommendations(await recommendationsRes.json());
-      if (favoritesRes.ok) setFavorites(await favoritesRes.json());
-      if (bookingsRes.ok) setBookings(await bookingsRes.json());
-      if (chatRes.ok) setChatThreads(await chatRes.json());
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setIsLoading(false);
+    // Check for tab parameter in URL
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['overview', 'recommendations', 'favorites', 'bookings', 'chats'].includes(tabParam)) {
+      setActiveTab(tabParam);
     }
-  };
+  }, [session, status, searchParams, fetchDashboardData]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -183,7 +287,7 @@ export default function BachelorDashboard() {
             <div className="flex items-center">
               <Heart className="h-8 w-8 text-red-500" />
               <div className="ml-4">
-                <p className="text-2xl font-bold">{favorites.length}</p>
+                <p className="text-2xl font-bold">{Array.isArray(favorites) ? favorites.length : 0}</p>
                 <p className="text-sm text-muted-foreground">Favorites</p>
               </div>
             </div>
@@ -205,7 +309,7 @@ export default function BachelorDashboard() {
             <div className="flex items-center">
               <MessageCircle className="h-8 w-8 text-green-500" />
               <div className="ml-4">
-                <p className="text-2xl font-bold">{chatThreads.length}</p>
+                <p className="text-2xl font-bold">{Array.isArray(chatThreads) ? chatThreads.length : 0}</p>
                 <p className="text-sm text-muted-foreground">Active Chats</p>
               </div>
             </div>
@@ -294,7 +398,7 @@ export default function BachelorDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {bookings.slice(0, 3).map((booking) => (
+                  {Array.isArray(bookings) && bookings.slice(0, 3).map((booking) => (
                     <div key={booking.id} className="flex items-center space-x-4 p-4 border rounded-lg">
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
@@ -307,12 +411,12 @@ export default function BachelorDashboard() {
                           {booking.listing.location}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          ৳{booking.totalAmount.toLocaleString()}
+                          ৳{booking.totalAmount ? booking.totalAmount.toLocaleString() : 'N/A'}
                         </p>
                       </div>
                     </div>
                   ))}
-                  {bookings.length === 0 && (
+                  {(!Array.isArray(bookings) || bookings.length === 0) && (
                     <p className="text-center text-muted-foreground py-8">
                       No recent bookings. Start exploring rooms!
                     </p>
@@ -347,7 +451,7 @@ export default function BachelorDashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {recommendations.slice(0, 2).map((listing: Listing) => (
+                {Array.isArray(recommendations) && recommendations.slice(0, 2).map((listing: Listing) => (
                   <div key={listing.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between mb-2">
                       <h4 className="font-medium line-clamp-1">{listing.title}</h4>
@@ -409,10 +513,10 @@ export default function BachelorDashboard() {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {recommendations.map((listing: Listing) => (
+            {Array.isArray(recommendations) && recommendations.map((listing: Listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
-            {recommendations.length === 0 && (
+            {(!Array.isArray(recommendations) || recommendations.length === 0) && (
               <div className="col-span-full text-center py-12">
                 <p className="text-muted-foreground">No recommendations available at the moment.</p>
                 <Link href="/profile/edit">
@@ -434,10 +538,10 @@ export default function BachelorDashboard() {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {favorites.map((listing: Listing) => (
+            {Array.isArray(favorites) && favorites.map((listing: Listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
-            {favorites.length === 0 && (
+            {(!Array.isArray(favorites) || favorites.length === 0) && (
               <div className="col-span-full text-center py-12">
                 <Heart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">No saved rooms yet.</p>
@@ -460,15 +564,17 @@ export default function BachelorDashboard() {
             </div>
           </div>
           <div className="space-y-4">
-            {bookings.map((booking) => (
+            {Array.isArray(bookings) && bookings.map((booking) => (
               <Card key={booking.id}>
                 <CardContent className="p-6">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center space-x-4">
                       {booking.listing.images.length > 0 && (
-                        <img
+                        <Image
                           src={booking.listing.images[0]}
                           alt={booking.listing.title}
+                          width={64}
+                          height={64}
                           className="w-16 h-16 rounded-lg object-cover"
                         />
                       )}
@@ -488,7 +594,7 @@ export default function BachelorDashboard() {
                         {booking.status}
                       </Badge>
                       <p className="text-lg font-semibold mt-2">
-                        ৳{booking.totalAmount.toLocaleString()}
+                        ৳{booking.totalAmount ? booking.totalAmount.toLocaleString() : 'N/A'}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
@@ -511,7 +617,7 @@ export default function BachelorDashboard() {
                 </CardContent>
               </Card>
             ))}
-            {bookings.length === 0 && (
+            {(!Array.isArray(bookings) || bookings.length === 0) && (
               <div className="text-center py-12">
                 <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">No bookings yet.</p>
@@ -534,34 +640,43 @@ export default function BachelorDashboard() {
             </div>
           </div>
           <div className="space-y-4">
-            {chatThreads.map((thread) => (
-              <Card key={thread.id} className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="flex items-center space-x-4">
-                    <Avatar>
-                      <AvatarImage src={thread.landlordAvatar} />
-                      <AvatarFallback>{thread.landlordName.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold">{thread.landlordName}</h3>
-                        <span className="text-sm text-muted-foreground">
-                          {new Date(thread.lastMessageTime).toLocaleDateString()}
-                        </span>
+            {Array.isArray(chatThreads) && chatThreads.map((thread) => (
+              <Link key={thread.id} href={`/chat/${thread.id}`}>
+                <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-center space-x-4">
+                      <Avatar>
+                        <AvatarImage src={thread.landlordAvatar} />
+                        <AvatarFallback>{thread.landlordName?.charAt(0) || 'L'}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold">{thread.landlordName}</h3>
+                          <span className="text-sm text-muted-foreground">
+                            {thread.lastMessageTime ? 
+                              new Date(thread.lastMessageTime).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }) : 'Recently'
+                            }
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{thread.listingTitle}</p>
+                        <p className="text-sm mt-1 line-clamp-2">{thread.lastMessage}</p>
                       </div>
-                      <p className="text-sm text-muted-foreground">{thread.listingTitle}</p>
-                      <p className="text-sm mt-1">{thread.lastMessage}</p>
+                      {(thread.unreadCount ?? 0) > 0 && (
+                        <Badge variant="destructive" className="ml-2">
+                          {thread.unreadCount}
+                        </Badge>
+                      )}
                     </div>
-                    {thread.unreadCount > 0 && (
-                      <Badge variant="destructive" className="ml-2">
-                        {thread.unreadCount}
-                      </Badge>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </Link>
             ))}
-            {chatThreads.length === 0 && (
+            {(!Array.isArray(chatThreads) || chatThreads.length === 0) && (
               <div className="text-center py-12">
                 <MessageCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">No messages yet.</p>
