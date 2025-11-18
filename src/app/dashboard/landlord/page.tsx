@@ -63,11 +63,10 @@ interface Booking {
   startDate: string;
   endDate: string;
   totalAmount: number;
-  bachelor: {
+  user: {
     name: string;
     phone?: string;
     email: string;
-    profilePicture?: string;
   };
   listing: {
     id: string;
@@ -314,12 +313,11 @@ export default function LandlordDashboard() {
                   {Array.isArray(bookings) && bookings.slice(0, 5).map((booking) => (
                     <div key={booking.id} className="flex items-center space-x-4 p-4 border rounded-lg">
                       <Avatar>
-                        <AvatarImage src={booking.bachelor.profilePicture} />
-                        <AvatarFallback>{booking.bachelor.name?.charAt(0) || 'B'}</AvatarFallback>
+                        <AvatarFallback>{booking.user?.name?.charAt(0) || 'U'}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
-                          <h4 className="font-medium">{booking.bachelor.name}</h4>
+                          <h4 className="font-medium">{booking.user?.name}</h4>
                           <Badge className={getStatusColor(booking.status)}>
                             {booking.status}
                           </Badge>
@@ -459,11 +457,10 @@ export default function LandlordDashboard() {
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center space-x-4">
                       <Avatar className="h-12 w-12">
-                        <AvatarImage src={booking.bachelor.profilePicture} />
-                        <AvatarFallback>{booking.bachelor.name?.charAt(0) || 'B'}</AvatarFallback>
+                        <AvatarFallback>{booking.user?.name?.charAt(0) || 'U'}</AvatarFallback>
                       </Avatar>
                       <div>
-                        <h3 className="font-semibold">{booking.bachelor.name}</h3>
+                        <h3 className="font-semibold">{booking.user?.name}</h3>
                         <p className="text-sm text-muted-foreground">
                           {booking.listing.title}
                         </p>
@@ -472,7 +469,7 @@ export default function LandlordDashboard() {
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <Mail className="h-3 w-3" />
-                          <span className="text-xs">{booking.bachelor.email}</span>
+                          <span className="text-xs">{booking.user?.email}</span>
                         </div>
                       </div>
                     </div>
@@ -497,7 +494,7 @@ export default function LandlordDashboard() {
                             </Button>
                           </>
                         )}
-                        {booking.bachelor.phone && (
+                        {booking.user?.phone && (
                           <Button size="sm" variant="outline">
                             <Phone className="h-4 w-4 mr-1" />
                             Call
@@ -623,7 +620,7 @@ export default function LandlordDashboard() {
                           <p className="text-xs text-muted-foreground">Bookings</p>
                         </div>
                         <div className="text-center">
-                          <p className="font-medium">{listing.rating.toFixed(1)}</p>
+                          <p className="font-medium">{listing.rating ? listing.rating.toFixed(1) : 'N/A'}</p>
                           <p className="text-xs text-muted-foreground">Rating</p>
                         </div>
                       </div>
