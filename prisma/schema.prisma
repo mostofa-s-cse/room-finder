@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -108,7 +108,7 @@ model Listing {
   lng           Float
   roomType      RoomType @default(SINGLE)
   amenities     Json     @default("[]")
-  images        String[] @default([])
+  images        Json     @default("[]")
   averageRating Float    @default(0)
   ratingAvg     Float    @default(0)
   ratingCount   Int      @default(0)
@@ -457,7 +457,7 @@ model SearchAnalytics {
   query           String
   filters         String   // JSON string of SearchFilters
   resultCount     Int
-  clickedListings String[] // Array of listing IDs that were clicked
+  clickedListings Json     // Array of listing IDs that were clicked (stored as JSON)
   searchTime      Int      // Time taken for search in milliseconds
   userAgent       String?
   ipAddress       String?
