@@ -40,7 +40,15 @@ export function FeaturedListingsClient() {
           const listingsData = Array.isArray(data.data) ? data.data : 
                                Array.isArray(data) ? data : 
                                Array.isArray(data.listings) ? data.listings : [];
-          setListings(listingsData);
+          
+          // Process listings to handle rent display
+          const processedListings = listingsData.map((listing: Listing) => ({
+            ...listing,
+            images: listing.images || [], // Ensure images is always an array
+            rent: listing.rent || 0 // Ensure rent is a number
+          }));
+          
+          setListings(processedListings);
         } else {
           console.error('Failed to fetch listings:', res.status, res.statusText);
           setListings([]);
@@ -107,7 +115,7 @@ export function FeaturedListingsClient() {
         
         <div className="text-center">
           <Button asChild variant="outline" size="lg">
-            <Link href="/for-rent">View All Rooms</Link>
+            <Link href="/search">View All Rooms</Link>
           </Button>
         </div>
       </div>

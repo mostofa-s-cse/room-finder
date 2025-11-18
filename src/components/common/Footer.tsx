@@ -10,7 +10,7 @@ const footerSections = [
   {
     title: 'For Renters',
     links: [
-      { label: 'Find Rooms', href: '/for-rent' },
+      { label: 'Find Rooms', href: '/search' },
       { label: 'Search by Area', href: '/search' },
       { label: 'Price Calculator', href: '/tools/calculator' },
       { label: 'Moving Guide', href: '/guide/moving' },

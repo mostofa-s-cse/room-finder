@@ -57,7 +57,7 @@ const navigationItems = [
   },
   {
     title: 'For Rent',
-    href: '/for-rent',
+    href: '/search',
     icon: Building2,
     description: 'All available rental properties',
   },

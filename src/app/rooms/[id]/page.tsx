@@ -194,7 +194,7 @@ export default function RoomDetailsPage() {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Room Not Found</h1>
           <p className="text-gray-600 mb-6">The room you&apos;re looking for doesn&apos;t exist.</p>
-          <Button onClick={() => router.push('/for-rent')}>Browse Rooms</Button>
+          <Button onClick={() => router.push('/search')}>Browse Rooms</Button>
         </div>
       </div>
     );

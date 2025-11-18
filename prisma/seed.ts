@@ -191,11 +191,7 @@ async function main() {
         lat,
         lng,
         amenities: sample.amenities,
-        images: [
-          'https://images.unsplash.com/photo-1555854877-bab0e655b7e3?w=400',
-          'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400',
-          'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400'
-        ]
+        images: ['/images/default-room.svg']
       }
     });
     
@@ -231,10 +227,7 @@ async function main() {
         roomType: sampleListing.roomType,
         amenities: randomAmenities,
         landlordId: landlord.id,
-        images: [
-          'https://images.unsplash.com/photo-1555854877-bab0e655b7e3?w=400',
-          'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400'
-        ]
+        images: ['/images/default-room.svg']
       }
     });
     

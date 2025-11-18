@@ -545,7 +545,7 @@ export default function BachelorDashboard() {
               <div className="col-span-full text-center py-12">
                 <Heart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">No saved rooms yet.</p>
-                <Link href="/for-rent">
+                <Link href="/search">
                   <Button className="mt-4">
                     Explore Rooms
                   </Button>
@@ -621,7 +621,7 @@ export default function BachelorDashboard() {
               <div className="text-center py-12">
                 <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">No bookings yet.</p>
-                <Link href="/for-rent">
+                <Link href="/search">
                   <Button className="mt-4">
                     Find Rooms
                   </Button>

@@ -82,10 +82,10 @@ export function ListingCard({ listing, className = "" }: ListingCardProps) {
       <div className="relative">
         <Link href={`/rooms/${listing.id}`}>
           <div className="relative h-48 overflow-hidden rounded-t-lg">
-            {listing.images.length > 0 ? (
+            {listing.images.length > 0 && !listing.images[0].includes('/images/default-room.svg') ? (
               <>
                 <Image
-                  src={listing.images[currentImageIndex] || '/placeholder-room.jpg'}
+                  src={listing.images[currentImageIndex]}
                   alt={listing.title}
                   fill
                   className="object-cover group-hover:scale-105 transition-transform duration-200"
@@ -118,8 +118,14 @@ export function ListingCard({ listing, className = "" }: ListingCardProps) {
                 )}
               </>
             ) : (
-              <div className="w-full h-full bg-muted flex items-center justify-center">
-                <span className="text-muted-foreground">No Image</span>
+              <div className="relative w-full h-full bg-gray-100 flex items-center justify-center">
+                <Image
+                  src="/images/default-room.svg"
+                  alt={listing.title}
+                  width={300}
+                  height={200}
+                  className="object-contain max-w-full max-h-full"
+                />
               </div>
             )}
           </div>
@@ -168,7 +174,7 @@ export function ListingCard({ listing, className = "" }: ListingCardProps) {
           </div>
           <div className="text-right ml-2">
             <div className="text-2xl font-bold">
-              ৳{listing.rent ? listing.rent.toLocaleString() : 'Contact for price'}
+              {listing.rent && listing.rent > 0 ? `৳${listing.rent.toLocaleString()}` : '৳Contact for price'}
             </div>
             <div className="text-sm text-muted-foreground">per month</div>
           </div>

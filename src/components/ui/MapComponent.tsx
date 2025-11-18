@@ -54,6 +54,24 @@ export function MapComponent({
       setIsLoading(true);
       setError(null);
 
+      // Clean up existing map instance
+      if (mapInstanceRef.current) {
+        try {
+          if (mapProvider === 'google') {
+            // Google Maps cleanup is handled automatically
+          } else {
+            // Leaflet cleanup
+            const leafletMap = mapInstanceRef.current as import('leaflet').Map;
+            if (leafletMap.remove) {
+              leafletMap.remove();
+            }
+          }
+        } catch (error) {
+          console.warn('Error during map cleanup:', error);
+        }
+        mapInstanceRef.current = null;
+      }
+
       const config: MapConfig = {
         center,
         zoom: currentZoom,
@@ -195,6 +213,39 @@ export function MapComponent({
       addHeatmapToMap(mapInstanceRef.current);
     }
   }, [addHeatmapToMap]);
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      // Cleanup map instance when component unmounts
+      if (mapInstanceRef.current) {
+        try {
+          if (mapProvider === 'google') {
+            // Google Maps cleanup is handled automatically
+          } else {
+            // Leaflet cleanup
+            const leafletMap = mapInstanceRef.current as import('leaflet').Map;
+            if (leafletMap.remove) {
+              leafletMap.remove();
+            }
+          }
+        } catch (error) {
+          console.warn('Error during map cleanup:', error);
+        }
+        mapInstanceRef.current = null;
+      }
+      
+      // Clean up the container
+      if (mapRef.current) {
+        mapRef.current.innerHTML = '';
+        delete (mapRef.current as any)._leaflet_id;
+      }
+      
+      // Clear markers and heatmap references
+      markersRef.current = [];
+      heatmapRef.current = null;
+    };
+  }, [mapProvider]);
 
   if (error) {
     return (

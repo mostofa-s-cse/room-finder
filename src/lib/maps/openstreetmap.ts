@@ -43,6 +43,20 @@ export class OpenStreetMapService {
     await this.loadLeaflet();
     const L = await import('leaflet');
 
+    // Check if container already has a map instance and remove it
+    const existingMap = (container as any)._leaflet_id;
+    if (existingMap) {
+      // Remove existing map
+      const mapInstance = (L as any).map(container);
+      if (mapInstance && mapInstance.remove) {
+        mapInstance.remove();
+      }
+      // Clear the container
+      container.innerHTML = '';
+      // Remove Leaflet's internal reference
+      delete (container as any)._leaflet_id;
+    }
+
     const map = L.map(container, {
       center: [config.center.lat, config.center.lng],
       zoom: config.zoom,
@@ -182,6 +196,36 @@ export class OpenStreetMapService {
         ${marker.description ? `<p class="text-xs text-gray-600">${marker.description}</p>` : ''}
       </div>
     `;
+  }
+
+  async destroyMap(map: Map): Promise<void> {
+    if (map && map.remove) {
+      map.remove();
+    }
+  }
+
+  static async cleanupContainer(container: HTMLElement): Promise<void> {
+    if (typeof window !== 'undefined' && container) {
+      // Remove any existing map instance
+      const existingMap = (container as any)._leaflet_id;
+      if (existingMap) {
+        try {
+          const L = await import('leaflet');
+          // Try to find and remove the map instance
+          const maps = (L as any).maps || {};
+          if (maps[existingMap]) {
+            maps[existingMap].remove();
+          }
+        } catch (error) {
+          console.warn('Error cleaning up map:', error);
+        }
+        
+        // Clear the container
+        container.innerHTML = '';
+        // Remove Leaflet's internal reference
+        delete (container as any)._leaflet_id;
+      }
+    }
   }
 
   private getHeatmapColor(weight: number): string {

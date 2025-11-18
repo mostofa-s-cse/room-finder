@@ -180,7 +180,7 @@ function CTASection() {
         </p>
         <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
           <Button asChild size="lg" className="bg-white text-purple-600 hover:bg-gray-100 font-semibold px-8 py-4 text-lg rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
-            <Link href="/for-rent">
+            <Link href="/search">
               <Search className="h-5 w-5 mr-2" />
               Browse Rooms
             </Link>

@@ -28,8 +28,8 @@ export function Footer() {
               </h2>
               <ul className="text-gray-600 font-medium">
                 <li className="mb-4">
-                  <Link href="/for-rent" className="hover:underline">
-                    Browse Rooms
+                  <Link href="/search" className="hover:underline">
+                    Search Rooms
                   </Link>
                 </li>
                 <li className="mb-4">
