@@ -87,9 +87,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const body = await request.json();
   const validatedData = listingSchema.parse(body);
 
+  // Convert availableFrom string to Date if provided
+  const availableFromDate = validatedData.availableFrom ? new Date(validatedData.availableFrom) : null;
+  
+  // Exclude availableFrom from validatedData since we're converting it
+  const { availableFrom, ...listingData } = validatedData;
+
   const listing = await prisma.listing.create({
     data: {
-      ...validatedData,
+      ...listingData,
+      availableFrom: availableFromDate,
       landlordId: session.user.id,
       lat: 0, // TODO: Calculate from address
       lng: 0, // TODO: Calculate from address

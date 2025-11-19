@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +5,959 @@ generator client {
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String                   @id @default(cuid())
+  name                    String
+  email                   String                   @unique
+  phone                   String?
+  passwordHash            String
+  role                    UserRole                 @default(BACHELOR)
+  status                  String                   @default("ACTIVE")
+  income                  Float?
+  affordablePrice         Float?
+  transportMode           TransportMode?
+  lastLogin               DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  adminLogs               AdminLog[]               @relation("AdminLogs")
+  analyticsAlerts         AnalyticsAlert[]         @relation("UserAlerts")
+  analyticsInsights       AnalyticsInsight[]       @relation("UserInsights")
+  blockedByUsers          BlockedUser[]            @relation("UserBlockedBy")
+  blockedUsers            BlockedUser[]            @relation("UserBlocked")
+  payments                BookingPayment[]         @relation("UserPayments")
+  bookings                Booking[]
+  chatAnalytics           ChatAnalytics[]          @relation("UserChatAnalytics")
+  chatParticipants        ChatParticipant[]        @relation("UserChatParticipants")
+  chatReports             ChatReport[]             @relation("UserChatReports")
+  chatSettings            ChatSettings?            @relation("UserChatSettings")
+  invoices                Invoice[]                @relation("UserInvoices")
+  landlordAnalytics       LandlordAnalytics[]      @relation("LandlordAnalyticsData")
+  listings                Listing[]
+  notificationPreferences NotificationPreferences? @relation("UserNotificationPreferences")
+  notifications           NotificationModel[]      @relation("UserNotifications")
+  paymentIntents          PaymentIntent[]          @relation("UserPaymentIntents")
+  paymentMethods          PaymentMethod[]          @relation("UserPaymentMethods")
+  pushSubscriptions       PushSubscription[]       @relation("UserPushSubscriptions")
+  reports                 Report[]
+  reviews                 Review[]
+  savedSearches           SavedSearch[]            @relation("UserSavedSearches")
+  searchAnalytics         SearchAnalytics[]        @relation("UserSearchAnalytics")
+  subscriptions           Subscription[]           @relation("UserSubscriptions")
+  transactions            Transaction[]            @relation("UserTransactions")
+  userActions             UserAction[]             @relation("UserActionHistory")
+  userAnalytics           UserAnalytics[]          @relation("UserAnalyticsData")
+
+  @@map("users")
+}
+
+model Listing {
+  id                String             @id @default(cuid())
+  landlordId        String
+  title             String
+  description       String
+  price             Float
+  monthlyRent       Float?
+  city              String
+  address           String
+  location          String?
+  lat               Float
+  lng               Float
+  roomType          RoomType           @default(SINGLE)
+  amenities         Json             @default("[]")
+  images            Json             @default("[]")
+  averageRating     Float              @default(0)
+  ratingAvg         Float              @default(0)
+  ratingCount       Int                @default(0)
+  status            String             @default("PENDING")
+  isPublished       Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  availableFrom     DateTime?
+  contactEmail      String?
+  contactPhone      String?
+  rules             Json             @default("[]")
+  analyticsAlerts   AnalyticsAlert[]   @relation("ListingAlerts")
+  analyticsInsights AnalyticsInsight[] @relation("ListingInsights")
+  payments          BookingPayment[]   @relation("ListingPayments")
+  bookings          Booking[]
+  chatThreads       ChatThread[]       @relation("ThreadListing")
+  listingAnalytics  ListingAnalytics?  @relation("ListingAnalyticsData")
+  landlord          User               @relation(fields: [landlordId], references: [id], onDelete: Cascade)
+  paymentIntents    PaymentIntent[]    @relation("ListingPaymentIntents")
+  reports           Report[]
+  reviews           Review[]
+  transactions      Transaction[]      @relation("ListingTransactions")
+
+  @@index([landlordId], map: "listings_landlordId_fkey")
+  @@map("listings")
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  listingId  String
+  reviewerId String
+  rating     Int      @db.SmallInt
+  comment    String
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  reports    Report[]
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reviewer   User     @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, reviewerId])
+  @@index([reviewerId], map: "reviews_reviewerId_fkey")
+  @@map("reviews")
+}
+
+model Booking {
+  id              String          @id @default(cuid())
+  listingId       String
+  userId          String
+  startDate       DateTime
+  endDate         DateTime
+  amount          Float
+  totalAmount     Float?
+  currency        String          @default("BDT")
+  status          BookingStatus   @default(PENDING)
+  stripeSessionId String?
+  createdAt       DateTime        @default(now())
+  payment         BookingPayment?
+  listing         Listing         @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentIntents  PaymentIntent[] @relation("BookingPaymentIntents")
+  transactions    Transaction[]   @relation("BookingTransactions")
+
+  @@index([listingId], map: "bookings_listingId_fkey")
+  @@index([userId], map: "bookings_userId_fkey")
+  @@map("bookings")
+}
+
+model ChatThread {
+  id            String            @id @default(cuid())
+  type          ThreadType        @default(DIRECT)
+  title         String?
+  description   String?
+  avatar        String?
+  listingId     String?
+  isActive      Boolean           @default(true)
+  isPinned      Boolean           @default(false)
+  isMuted       Boolean           @default(false)
+  lastMessageAt DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  analytics     ChatAnalytics[]   @relation("ThreadAnalytics")
+  messages      ChatMessage[]     @relation("ThreadMessages")
+  participants  ChatParticipant[] @relation("ThreadParticipants")
+  reports       ChatReport[]      @relation("ThreadReports")
+  listing       Listing?          @relation("ThreadListing", fields: [listingId], references: [id])
+
+  @@index([listingId], map: "chat_threads_listingId_fkey")
+  @@map("chat_threads")
+}
+
+model ChatParticipant {
+  id           String               @id @default(cuid())
+  userId       String
+  threadId     String
+  role         ParticipantRole      @default(MEMBER)
+  joinedAt     DateTime             @default(now())
+  lastSeenAt   DateTime?
+  isOnline     Boolean              @default(false)
+  isMuted      Boolean              @default(false)
+  isBlocked    Boolean              @default(false)
+  sentMessages ChatMessage[]        @relation("ParticipantSentMessages")
+  thread       ChatThread           @relation("ThreadParticipants", fields: [threadId], references: [id], onDelete: Cascade)
+  user         User                 @relation("UserChatParticipants", fields: [userId], references: [id], onDelete: Cascade)
+  readReceipts MessageReadReceipt[] @relation("ParticipantReadReceipts")
+
+  @@unique([userId, threadId])
+  @@index([threadId], map: "chat_participants_threadId_fkey")
+  @@map("chat_participants")
+}
+
+model ChatMessage {
+  id           String               @id @default(cuid())
+  threadId     String
+  senderId     String
+  content      String
+  type         MessageType          @default(TEXT)
+  status       MessageStatus        @default(SENT)
+  metadata     Json?
+  replyToId    String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  deliveredAt  DateTime?
+  readAt       DateTime?
+  editedAt     DateTime?
+  replyTo      ChatMessage?         @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies      ChatMessage[]        @relation("MessageReplies")
+  sender       ChatParticipant      @relation("ParticipantSentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  thread       ChatThread           @relation("ThreadMessages", fields: [threadId], references: [id], onDelete: Cascade)
+  reports      ChatReport[]         @relation("MessageReports")
+  attachments  MessageAttachment[]  @relation("MessageAttachments")
+  readReceipts MessageReadReceipt[] @relation("MessageReadReceipts")
+
+  @@index([replyToId], map: "chat_messages_replyToId_fkey")
+  @@index([senderId], map: "chat_messages_senderId_fkey")
+  @@index([threadId], map: "chat_messages_threadId_fkey")
+  @@map("chat_messages")
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  listingId  String?
+  reviewId   String?
+  targetType String
+  reason     String
+  details    String?
+  status     String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  listing    Listing? @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reporter   User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  review     Review?  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([listingId], map: "reports_listingId_fkey")
+  @@index([reporterId], map: "reports_reporterId_fkey")
+  @@index([reviewId], map: "reports_reviewId_fkey")
+  @@map("reports")
+}
+
+model AdminLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  action     String
+  targetId   String?
+  targetType String?
+  details    String?
+  createdAt  DateTime @default(now())
+  admin      User     @relation("AdminLogs", fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId], map: "admin_logs_adminId_fkey")
+  @@map("admin_logs")
+}
+
+model BookingPayment {
+  id                  String      @id @default(cuid())
+  bookingId           String      @unique
+  userId              String
+  listingId           String
+  amount              Float
+  currency            String      @default("BDT")
+  status              String      @default("PENDING")
+  paymentMethod       String?
+  transactionId       String?
+  bankTransactionId   String?
+  sslTransactionId    String?
+  sessionkey          String?
+  cardType            String?
+  cardNo              String?
+  cardIssuer          String?
+  paymentAt           DateTime?
+  failedReason        String?
+  refundAmount        Float?      @default(0)
+  refundedAt          DateTime?
+  refundTransactionId String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  booking             Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  listing             Listing     @relation("ListingPayments", fields: [listingId], references: [id], onDelete: Cascade)
+  user                User        @relation("UserPayments", fields: [userId], references: [id], onDelete: Cascade)
+  refunds             RefundLog[]
+
+  @@index([listingId], map: "booking_payments_listingId_fkey")
+  @@index([userId], map: "booking_payments_userId_fkey")
+  @@map("booking_payments")
+}
+
+model RefundLog {
+  id            String         @id @default(cuid())
+  paymentId     String
+  amount        Float
+  reason        String
+  requestedBy   String
+  processedBy   String
+  transactionId String?
+  status        String         @default("PENDING")
+  failureReason String?
+  createdAt     DateTime       @default(now())
+  payment       BookingPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId], map: "refund_logs_paymentId_fkey")
+  @@map("refund_logs")
+}
+
+model NotificationModel {
+  id         String                 @id @default(cuid())
+  userId     String
+  type       String
+  title      String
+  message    String
+  data       Json?
+  isRead     Boolean                @default(false)
+  priority   String
+  category   String
+  actionUrl  String?
+  expiresAt  DateTime?
+  createdAt  DateTime               @default(now())
+  readAt     DateTime?
+  deliveries NotificationDelivery[]
+  user       User                   @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "notifications_userId_fkey")
+  @@map("notifications")
+}
+
+model NotificationPreferences {
+  userId               String   @id
+  emailEnabled         Boolean  @default(true)
+  emailBookings        Boolean  @default(true)
+  emailListings        Boolean  @default(true)
+  emailMessages        Boolean  @default(false)
+  emailRecommendations Boolean  @default(true)
+  emailMarketing       Boolean  @default(false)
+  emailSecurity        Boolean  @default(true)
+  pushEnabled          Boolean  @default(true)
+  pushBookings         Boolean  @default(true)
+  pushListings         Boolean  @default(true)
+  pushMessages         Boolean  @default(true)
+  pushRecommendations  Boolean  @default(false)
+  pushMarketing        Boolean  @default(false)
+  inAppEnabled         Boolean  @default(true)
+  inAppBookings        Boolean  @default(true)
+  inAppListings        Boolean  @default(true)
+  inAppMessages        Boolean  @default(true)
+  inAppRecommendations Boolean  @default(true)
+  inAppMarketing       Boolean  @default(false)
+  smsEnabled           Boolean  @default(false)
+  smsBookings          Boolean  @default(false)
+  smsEmergency         Boolean  @default(true)
+  quietHoursEnabled    Boolean  @default(false)
+  quietHoursStart      String   @default("22:00")
+  quietHoursEnd        String   @default("08:00")
+  timezone             String   @default("Asia/Dhaka")
+  digestEnabled        Boolean  @default(false)
+  digestFrequency      String   @default("WEEKLY")
+  updatedAt            DateTime @default(now()) @updatedAt
+  user                 User     @relation("UserNotificationPreferences", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model NotificationDelivery {
+  id             String            @id @default(cuid())
+  notificationId String
+  channel        String
+  status         String            @default("PENDING")
+  provider       String?
+  externalId     String?
+  errorMessage   String?
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  notification   NotificationModel @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId], map: "notification_deliveries_notificationId_fkey")
+  @@map("notification_deliveries")
+}
+
+model PushSubscription {
+  id        String    @id @default(cuid())
+  userId    String
+  endpoint  String    @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  lastUsed  DateTime?
+  user      User      @relation("UserPushSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "push_subscriptions_userId_fkey")
+  @@map("push_subscriptions")
+}
+
+model SavedSearch {
+  id           String    @id @default(cuid())
+  userId       String
+  name         String
+  filters      String
+  alertEnabled Boolean   @default(true)
+  lastNotified DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation("UserSavedSearches", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "saved_searches_userId_fkey")
+  @@map("saved_searches")
+}
+
+model SearchAnalytics {
+  id              String   @id @default(cuid())
+  searchId        String   @unique
+  userId          String?
+  query           String
+  filters         String
+  resultCount     Int
+  clickedListings Json
+  searchTime      Int
+  userAgent       String?
+  ipAddress       String?
+  sessionId       String?
+  timestamp       DateTime @default(now())
+  user            User?    @relation("UserSearchAnalytics", fields: [userId], references: [id])
+
+  @@index([userId], map: "search_analytics_userId_fkey")
+  @@map("search_analytics")
+}
+
+model MessageReadReceipt {
+  id            String          @id @default(cuid())
+  messageId     String
+  participantId String
+  readAt        DateTime        @default(now())
+  message       ChatMessage     @relation("MessageReadReceipts", fields: [messageId], references: [id], onDelete: Cascade)
+  participant   ChatParticipant @relation("ParticipantReadReceipts", fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, participantId])
+  @@index([participantId], map: "message_read_receipts_participantId_fkey")
+  @@map("message_read_receipts")
+}
+
+model MessageAttachment {
+  id           String      @id @default(cuid())
+  messageId    String
+  fileName     String
+  fileUrl      String
+  fileType     String
+  fileSize     Int
+  thumbnailUrl String?
+  message      ChatMessage @relation("MessageAttachments", fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId], map: "message_attachments_messageId_fkey")
+  @@map("message_attachments")
+}
+
+model ChatSettings {
+  id                          String   @id @default(cuid())
+  userId                      String   @unique
+  enablePushNotifications     Boolean  @default(true)
+  enableEmailNotifications    Boolean  @default(true)
+  enableSoundNotifications    Boolean  @default(true)
+  allowMessagesFromStrangers  Boolean  @default(true)
+  showOnlineStatus            Boolean  @default(true)
+  showReadReceipts            Boolean  @default(true)
+  showTypingIndicators        Boolean  @default(true)
+  theme                       String   @default("auto")
+  fontSize                    String   @default("medium")
+  compactMode                 Boolean  @default(false)
+  autoArchiveAfterDays        Int?
+  autoDeleteMessagesAfterDays Int?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  user                        User     @relation("UserChatSettings", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("chat_settings")
+}
+
+model BlockedUser {
+  id            String   @id @default(cuid())
+  userId        String
+  blockedUserId String
+  reason        String?
+  blockedAt     DateTime @default(now())
+  blockedUser   User     @relation("UserBlockedBy", fields: [blockedUserId], references: [id], onDelete: Cascade)
+  user          User     @relation("UserBlocked", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, blockedUserId])
+  @@index([blockedUserId], map: "blocked_users_blockedUserId_fkey")
+  @@map("blocked_users")
+}
+
+model ChatReport {
+  id          String       @id @default(cuid())
+  reporterId  String
+  threadId    String
+  messageId   String?
+  reason      String
+  description String
+  status      String       @default("PENDING")
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  createdAt   DateTime     @default(now())
+  message     ChatMessage? @relation("MessageReports", fields: [messageId], references: [id], onDelete: Cascade)
+  reporter    User         @relation("UserChatReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  thread      ChatThread   @relation("ThreadReports", fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([messageId], map: "chat_reports_messageId_fkey")
+  @@index([reporterId], map: "chat_reports_reporterId_fkey")
+  @@index([threadId], map: "chat_reports_threadId_fkey")
+  @@map("chat_reports")
+}
+
+model ChatAnalytics {
+  id                  String     @id @default(cuid())
+  userId              String
+  threadId            String
+  messagesSent        Int        @default(0)
+  messagesReceived    Int        @default(0)
+  averageResponseTime Float      @default(0)
+  totalChatTime       Float      @default(0)
+  lastActivityAt      DateTime   @default(now())
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  thread              ChatThread @relation("ThreadAnalytics", fields: [threadId], references: [id], onDelete: Cascade)
+  user                User       @relation("UserChatAnalytics", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, threadId])
+  @@index([threadId], map: "chat_analytics_threadId_fkey")
+  @@map("chat_analytics")
+}
+
+model PaymentMethod {
+  id               String            @id @default(cuid())
+  userId           String
+  type             PaymentMethodType
+  provider         PaymentProvider
+  providerMethodId String
+  cardLast4        String?
+  cardBrand        String?
+  cardExpMonth     Int?
+  cardExpYear      Int?
+  cardCountry      String?
+  bankName         String?
+  bankLast4        String?
+  bankAccountType  String?
+  walletType       String?
+  isDefault        Boolean           @default(false)
+  isVerified       Boolean           @default(false)
+  nickname         String?
+  billingAddress   Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  paymentIntents   PaymentIntent[]   @relation("PaymentMethodIntents")
+  user             User              @relation("UserPaymentMethods", fields: [userId], references: [id], onDelete: Cascade)
+  subscriptions    Subscription[]    @relation("SubscriptionPaymentMethods")
+  transactions     Transaction[]     @relation("PaymentMethodTransactions")
+
+  @@index([userId], map: "payment_methods_userId_fkey")
+  @@map("payment_methods")
+}
+
+model PaymentIntent {
+  id               String          @id @default(cuid())
+  userId           String
+  amount           Int
+  currency         Currency
+  status           PaymentStatus
+  provider         PaymentProvider
+  providerIntentId String
+  paymentMethodId  String?
+  subscriptionId   String?
+  listingId        String?
+  bookingId        String?
+  description      String?
+  receiptEmail     String?
+  metadata         Json?
+  clientSecret     String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  confirmedAt      DateTime?
+  canceledAt       DateTime?
+  booking          Booking?        @relation("BookingPaymentIntents", fields: [bookingId], references: [id])
+  listing          Listing?        @relation("ListingPaymentIntents", fields: [listingId], references: [id])
+  paymentMethod    PaymentMethod?  @relation("PaymentMethodIntents", fields: [paymentMethodId], references: [id])
+  subscription     Subscription?   @relation("SubscriptionPaymentIntents", fields: [subscriptionId], references: [id])
+  user             User            @relation("UserPaymentIntents", fields: [userId], references: [id], onDelete: Cascade)
+  transactions     Transaction[]   @relation("PaymentIntentTransactions")
+
+  @@index([bookingId], map: "payment_intents_bookingId_fkey")
+  @@index([listingId], map: "payment_intents_listingId_fkey")
+  @@index([paymentMethodId], map: "payment_intents_paymentMethodId_fkey")
+  @@index([subscriptionId], map: "payment_intents_subscriptionId_fkey")
+  @@index([userId], map: "payment_intents_userId_fkey")
+  @@map("payment_intents")
+}
+
+model Transaction {
+  id                    String          @id @default(cuid())
+  userId                String
+  type                  TransactionType
+  status                PaymentStatus
+  amount                Int
+  currency              Currency
+  paymentIntentId       String?
+  paymentMethodId       String?
+  subscriptionId        String?
+  listingId             String?
+  bookingId             String?
+  refundId              String?
+  description           String
+  metadata              Json?
+  provider              PaymentProvider
+  providerTransactionId String?
+  providerFee           Int?
+  grossAmount           Int
+  feeAmount             Int
+  netAmount             Int
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  processedAt           DateTime?
+  booking               Booking?        @relation("BookingTransactions", fields: [bookingId], references: [id])
+  listing               Listing?        @relation("ListingTransactions", fields: [listingId], references: [id])
+  paymentIntent         PaymentIntent?  @relation("PaymentIntentTransactions", fields: [paymentIntentId], references: [id])
+  paymentMethod         PaymentMethod?  @relation("PaymentMethodTransactions", fields: [paymentMethodId], references: [id])
+  subscription          Subscription?   @relation("SubscriptionTransactions", fields: [subscriptionId], references: [id])
+  user                  User            @relation("UserTransactions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId], map: "transactions_bookingId_fkey")
+  @@index([listingId], map: "transactions_listingId_fkey")
+  @@index([paymentIntentId], map: "transactions_paymentIntentId_fkey")
+  @@index([paymentMethodId], map: "transactions_paymentMethodId_fkey")
+  @@index([subscriptionId], map: "transactions_subscriptionId_fkey")
+  @@index([userId], map: "transactions_userId_fkey")
+  @@map("transactions")
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String
+  plan                   SubscriptionPlan
+  status                 SubscriptionStatus
+  provider               PaymentProvider
+  providerSubscriptionId String
+  providerCustomerId     String
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  billingCycleAnchor     DateTime?
+  defaultPaymentMethodId String?
+  currency               Currency
+  unitAmount             Int
+  quantity               Int                @default(1)
+  trialStart             DateTime?
+  trialEnd               DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  canceledAt             DateTime?
+  cancellationReason     String?
+  metadata               Json?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  invoices               Invoice[]          @relation("SubscriptionInvoices")
+  paymentIntents         PaymentIntent[]    @relation("SubscriptionPaymentIntents")
+  defaultPaymentMethod   PaymentMethod?     @relation("SubscriptionPaymentMethods", fields: [defaultPaymentMethodId], references: [id])
+  user                   User               @relation("UserSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
+  transactions           Transaction[]      @relation("SubscriptionTransactions")
+
+  @@index([defaultPaymentMethodId], map: "subscriptions_defaultPaymentMethodId_fkey")
+  @@index([userId], map: "subscriptions_userId_fkey")
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id                 String          @id @default(cuid())
+  userId             String
+  subscriptionId     String?
+  status             InvoiceStatus
+  provider           PaymentProvider
+  providerInvoiceId  String
+  invoiceNumber      String
+  description        String?
+  currency           Currency
+  subtotal           Int
+  taxAmount          Int             @default(0)
+  discountAmount     Int             @default(0)
+  total              Int
+  amountPaid         Int             @default(0)
+  amountDue          Int
+  periodStart        DateTime
+  periodEnd          DateTime
+  dueDate            DateTime?
+  paidAt             DateTime?
+  voidedAt           DateTime?
+  attemptCount       Int             @default(0)
+  nextPaymentAttempt DateTime?
+  items              Json
+  invoicePdf         String?
+  receiptNumber      String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  subscription       Subscription?   @relation("SubscriptionInvoices", fields: [subscriptionId], references: [id])
+  user               User            @relation("UserInvoices", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId], map: "invoices_subscriptionId_fkey")
+  @@index([userId], map: "invoices_userId_fkey")
+  @@map("invoices")
+}
+
+model WebhookEvent {
+  id          String          @id @default(cuid())
+  type        String
+  provider    PaymentProvider
+  data        Json
+  processed   Boolean         @default(false)
+  error       String?
+  attempts    Int             @default(0)
+  maxAttempts Int             @default(3)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("webhook_events")
+}
+
+model UserAnalytics {
+  id               String     @id @default(cuid())
+  userId           String?
+  sessionId        String
+  userAgent        String
+  ipAddress        String?
+  country          String?
+  city             String?
+  device           DeviceType
+  browser          String
+  referrer         String?
+  landingPage      String
+  sessionDuration  Int        @default(0)
+  pageViews        Int        @default(0)
+  actionsPerformed Json
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  user             User?      @relation("UserAnalyticsData", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("user_analytics")
+}
+
+model UserAction {
+  id        String     @id @default(cuid())
+  userId    String?
+  sessionId String
+  type      ActionType
+  target    String
+  metadata  Json?
+  page      String
+  duration  Int?
+  timestamp DateTime   @default(now())
+  user      User?      @relation("UserActionHistory", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([type])
+  @@index([timestamp])
+  @@map("user_actions")
+}
+
+model ListingAnalytics {
+  id                  String   @id @default(cuid())
+  listingId           String   @unique
+  views               Int      @default(0)
+  uniqueViews         Int      @default(0)
+  inquiries           Int      @default(0)
+  bookings            Int      @default(0)
+  conversionRate      Float    @default(0)
+  averageViewDuration Int      @default(0)
+  impressions         Int      @default(0)
+  clickThroughRate    Float    @default(0)
+  favoriteCount       Int      @default(0)
+  shareCount          Int      @default(0)
+  contactAttempts     Int      @default(0)
+  photoViews          Json
+  searchRankings      Json
+  geographicViews     Json
+  timeBasedViews      Json
+  competitorAnalysis  Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  listing             Listing  @relation("ListingAnalyticsData", fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([views])
+  @@index([conversionRate])
+  @@map("listing_analytics")
+}
+
+model PaymentAnalytics {
+  id                        String   @id @default(cuid())
+  period                    String   @unique
+  totalRevenue              Float    @default(0)
+  transactionCount          Int      @default(0)
+  averageTransactionValue   Float    @default(0)
+  successRate               Float    @default(0)
+  failureRate               Float    @default(0)
+  refundRate                Float    @default(0)
+  processingFees            Float    @default(0)
+  netRevenue                Float    @default(0)
+  paymentMethodDistribution Json
+  monthlyRevenue            Json
+  geographicRevenue         Json
+  userTypeRevenue           Json
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([period])
+  @@index([totalRevenue])
+  @@map("payment_analytics")
+}
+
+model GeographicAnalytics {
+  id                String         @id @default(cuid())
+  location          String         @unique
+  city              String
+  area              String
+  coordinates       Json
+  listingCount      Int            @default(0)
+  averagePrice      Float          @default(0)
+  priceRange        Json
+  demandLevel       DemandLevel    @default(MODERATE)
+  searchVolume      Int            @default(0)
+  bookingRate       Float          @default(0)
+  popularAmenities  Json
+  competitionLevel  String         @default("MODERATE")
+  growthRate        Float          @default(0)
+  trendingDirection TrendDirection @default(STABLE)
+  demographics      Json
+  marketInsights    Json
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([city])
+  @@index([area])
+  @@index([demandLevel])
+  @@index([averagePrice])
+  @@map("geographic_analytics")
+}
+
+model AdminAnalytics {
+  id                        String   @id @default(cuid())
+  period                    String   @unique
+  totalUsers                Int      @default(0)
+  activeUsers               Int      @default(0)
+  newUsersToday             Int      @default(0)
+  newUsersThisMonth         Int      @default(0)
+  totalListings             Int      @default(0)
+  activeListings            Int      @default(0)
+  newListingsToday          Int      @default(0)
+  totalBookings             Int      @default(0)
+  completedBookings         Int      @default(0)
+  cancelledBookings         Int      @default(0)
+  totalRevenue              Float    @default(0)
+  monthlyRevenue            Float    @default(0)
+  averageBookingValue       Float    @default(0)
+  platformGrowthRate        Float    @default(0)
+  userRetentionRate         Float    @default(0)
+  listingSuccessRate        Float    @default(0)
+  customerSatisfactionScore Float    @default(0)
+  supportTickets            Json
+  topPerformingAreas        Json
+  userEngagementMetrics     Json
+  systemHealthMetrics       Json
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([period])
+  @@index([totalRevenue])
+  @@index([platformGrowthRate])
+  @@map("admin_analytics")
+}
+
+model LandlordAnalytics {
+  id                    String   @id @default(cuid())
+  landlordId            String
+  period                String
+  totalListings         Int      @default(0)
+  activeListings        Int      @default(0)
+  totalViews            Int      @default(0)
+  totalInquiries        Int      @default(0)
+  totalBookings         Int      @default(0)
+  conversionRate        Float    @default(0)
+  averageRating         Float    @default(0)
+  totalRevenue          Float    @default(0)
+  monthlyRevenue        Float    @default(0)
+  occupancyRate         Float    @default(0)
+  responseTime          Int      @default(0)
+  responseRate          Float    @default(0)
+  customerSatisfaction  Float    @default(0)
+  topPerformingListings Json
+  monthlyMetrics        Json
+  competitorComparison  Json
+  marketPosition        Json
+  recommendations       Json
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  landlord              User     @relation("LandlordAnalyticsData", fields: [landlordId], references: [id], onDelete: Cascade)
+
+  @@unique([landlordId, period])
+  @@index([landlordId])
+  @@index([period])
+  @@index([conversionRate])
+  @@index([totalRevenue])
+  @@map("landlord_analytics")
+}
+
+model AnalyticsInsight {
+  id             String    @id @default(cuid())
+  type           String
+  category       String
+  title          String
+  description    String
+  confidence     Float     @default(0)
+  impact         String
+  actionable     Boolean   @default(false)
+  recommendation String?
+  relatedMetrics Json
+  userId         String?
+  listingId      String?
+  acknowledged   Boolean   @default(false)
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  listing        Listing?  @relation("ListingInsights", fields: [listingId], references: [id], onDelete: Cascade)
+  user           User?     @relation("UserInsights", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([type])
+  @@index([category])
+  @@index([impact])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([listingId])
+  @@map("analytics_insights")
+}
+
+model AnalyticsAlert {
+  id             String    @id @default(cuid())
+  type           String
+  severity       String
+  title          String
+  description    String
+  metric         String
+  threshold      Float
+  actualValue    Float
+  userId         String?
+  listingId      String?
+  acknowledged   Boolean   @default(false)
+  resolved       Boolean   @default(false)
+  acknowledgedBy String?
+  resolvedBy     String?
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  listing        Listing?  @relation("ListingAlerts", fields: [listingId], references: [id], onDelete: Cascade)
+  user           User?     @relation("UserAlerts", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([type])
+  @@index([severity])
+  @@index([acknowledged])
+  @@index([resolved])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([listingId])
+  @@map("analytics_alerts")
 }
 
 enum UserRole {
@@ -33,441 +983,6 @@ enum BookingStatus {
   PAID
   CANCELLED
   COMPLETED
-}
-
-model User {
-  id              String        @id @default(cuid())
-  name            String
-  email           String        @unique
-  phone           String?
-  passwordHash    String
-  role            UserRole      @default(BACHELOR)
-  status          String        @default("ACTIVE") // ACTIVE, SUSPENDED, BANNED
-  income          Float?
-  affordablePrice Float?
-  transportMode   TransportMode?
-  lastLogin       DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  // Relations
-  listings                    Listing[]
-  reviews                     Review[]
-  bookings                    Booking[]
-  reports                     Report[]
-  adminLogs                   AdminLog[]    @relation("AdminLogs")
-  
-  // Payment relations
-  payments                    BookingPayment[] @relation("UserPayments")
-  
-  // Notification relations
-  notifications               NotificationModel[] @relation("UserNotifications")
-  notificationPreferences     NotificationPreferences? @relation("UserNotificationPreferences")
-  pushSubscriptions           PushSubscription[] @relation("UserPushSubscriptions")
-  
-  // Chat relations
-  chatParticipants            ChatParticipant[] @relation("UserChatParticipants")
-  chatSettings                ChatSettings? @relation("UserChatSettings")
-  blockedUsers                BlockedUser[] @relation("UserBlocked")
-  blockedByUsers              BlockedUser[] @relation("UserBlockedBy")
-  chatReports                 ChatReport[] @relation("UserChatReports")
-  chatAnalytics               ChatAnalytics[] @relation("UserChatAnalytics")
-  
-  // Search relations
-  savedSearches               SavedSearch[] @relation("UserSavedSearches")
-  searchAnalytics             SearchAnalytics[] @relation("UserSearchAnalytics")
-  
-  // Payment and subscription relations
-  paymentMethods              PaymentMethod[] @relation("UserPaymentMethods")
-  paymentIntents              PaymentIntent[] @relation("UserPaymentIntents")
-  transactions                Transaction[] @relation("UserTransactions")
-  subscriptions               Subscription[] @relation("UserSubscriptions")
-  invoices                    Invoice[] @relation("UserInvoices")
-  
-  // Analytics relations
-  userAnalytics               UserAnalytics[] @relation("UserAnalyticsData")
-  userActions                 UserAction[] @relation("UserActionHistory")
-  landlordAnalytics           LandlordAnalytics[] @relation("LandlordAnalyticsData")
-  analyticsInsights           AnalyticsInsight[] @relation("UserInsights")
-  analyticsAlerts             AnalyticsAlert[] @relation("UserAlerts")
-
-  @@map("users")
-}
-
-model Listing {
-  id          String   @id @default(cuid())
-  landlordId  String
-  title       String
-  description   String
-  price         Float
-  monthlyRent   Float?
-  city          String
-  address       String
-  location      String?
-  lat           Float
-  lng           Float
-  roomType      RoomType @default(SINGLE)
-  amenities     Json     @default("[]")
-  images        Json     @default("[]")
-  averageRating Float    @default(0)
-  ratingAvg     Float    @default(0)
-  ratingCount   Int      @default(0)
-  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED, REPORTED, BANNED
-  isPublished   Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // Relations
-  landlord User             @relation(fields: [landlordId], references: [id], onDelete: Cascade)
-  reviews  Review[]
-  bookings Booking[]
-  reports  Report[]
-  payments BookingPayment[] @relation("ListingPayments")
-  chatThreads ChatThread[]  @relation("ThreadListing")
-  
-  // Payment relations
-  paymentIntents PaymentIntent[] @relation("ListingPaymentIntents")
-  transactions   Transaction[]   @relation("ListingTransactions")
-  
-  // Analytics relations
-  listingAnalytics  ListingAnalytics? @relation("ListingAnalyticsData")
-  analyticsInsights AnalyticsInsight[] @relation("ListingInsights")
-  analyticsAlerts   AnalyticsAlert[] @relation("ListingAlerts")
-
-  @@map("listings")
-}
-
-model Review {
-  id         String   @id @default(cuid())
-  listingId  String
-  reviewerId String
-  rating     Int      @db.SmallInt
-  comment    String
-  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED  
-  createdAt  DateTime @default(now())
-
-  // Relations
-  listing  Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  reviewer User     @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
-  reports  Report[]
-
-  // Constraints
-  @@unique([listingId, reviewerId]) // One review per user per listing
-  @@map("reviews")
-}
-
-model Booking {
-  id              String        @id @default(cuid())
-  listingId       String
-  userId          String
-  startDate       DateTime
-  endDate         DateTime
-  amount          Float
-  totalAmount     Float?
-  currency        String        @default("BDT")
-  status          BookingStatus @default(PENDING)
-  stripeSessionId String?
-  createdAt       DateTime      @default(now())
-
-  // Relations
-  listing Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  payment BookingPayment?
-  
-  // Payment relations
-  paymentIntents PaymentIntent[] @relation("BookingPaymentIntents")
-  transactions   Transaction[]   @relation("BookingTransactions")
-
-  @@map("bookings")
-}
-
-model ChatThread {
-  id            String      @id @default(cuid())
-  type          ThreadType  @default(DIRECT)
-  title         String?
-  description   String?
-  avatar        String?
-  listingId     String?
-  isActive      Boolean     @default(true)
-  isPinned      Boolean     @default(false)
-  isMuted       Boolean     @default(false)
-  lastMessageAt DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  // Relations
-  listing      Listing?          @relation("ThreadListing", fields: [listingId], references: [id], onDelete: SetNull)
-  participants ChatParticipant[] @relation("ThreadParticipants")
-  messages     ChatMessage[]     @relation("ThreadMessages")
-  reports      ChatReport[]      @relation("ThreadReports")
-  analytics    ChatAnalytics[]   @relation("ThreadAnalytics")
-
-  @@map("chat_threads")
-}
-
-model ChatParticipant {
-  id         String          @id @default(cuid())
-  userId     String
-  threadId   String
-  role       ParticipantRole @default(MEMBER)
-  joinedAt   DateTime        @default(now())
-  lastSeenAt DateTime?
-  isOnline   Boolean         @default(false)
-  isMuted    Boolean         @default(false)
-  isBlocked  Boolean         @default(false)
-
-  // Relations
-  user         User                   @relation("UserChatParticipants", fields: [userId], references: [id], onDelete: Cascade)
-  thread       ChatThread             @relation("ThreadParticipants", fields: [threadId], references: [id], onDelete: Cascade)
-  sentMessages ChatMessage[]          @relation("ParticipantSentMessages")
-  readReceipts MessageReadReceipt[]   @relation("ParticipantReadReceipts")
-
-  @@unique([userId, threadId])
-  @@map("chat_participants")
-}
-
-model ChatMessage {
-  id          String        @id @default(cuid())
-  threadId    String
-  senderId    String
-  content     String
-  type        MessageType   @default(TEXT)
-  status      MessageStatus @default(SENT)
-  metadata    Json?
-  replyToId   String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  deliveredAt DateTime?
-  readAt      DateTime?
-  editedAt    DateTime?
-
-  // Relations
-  thread        ChatThread           @relation("ThreadMessages", fields: [threadId], references: [id], onDelete: Cascade)
-  sender        ChatParticipant      @relation("ParticipantSentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  replyTo       ChatMessage?         @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies       ChatMessage[]        @relation("MessageReplies")
-  readReceipts  MessageReadReceipt[] @relation("MessageReadReceipts")
-  attachments   MessageAttachment[]  @relation("MessageAttachments")
-  reports       ChatReport[]         @relation("MessageReports")
-
-  @@map("chat_messages")
-}
-
-model Report {
-  id         String   @id @default(cuid())
-  reporterId String
-  listingId  String?
-  reviewId   String?
-  targetType String // LISTING, REVIEW, USER
-  reason     String
-  details    String?
-  status     String @default("PENDING") // PENDING, REVIEWED, RESOLVED
-  createdAt  DateTime @default(now())
-
-  // Relations
-  reporter User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
-  listing  Listing? @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  review   Review?  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-
-  @@map("reports") 
-}
-
-model AdminLog {
-  id         String   @id @default(cuid())
-  adminId    String
-  action     String
-  targetId   String?
-  targetType String?
-  details    String?
-  createdAt  DateTime @default(now())
-
-  // Relations
-  admin User @relation("AdminLogs", fields: [adminId], references: [id], onDelete: Cascade)
-
-  @@map("admin_logs")
-}
-
-model BookingPayment {
-  id                  String   @id @default(cuid())
-  bookingId           String   @unique
-  userId              String
-  listingId           String
-  amount              Float
-  currency            String   @default("BDT")
-  status              String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED
-  paymentMethod       String?
-  transactionId       String?
-  bankTransactionId   String?
-  sslTransactionId    String?
-  sessionkey          String?
-  cardType            String?
-  cardNo              String?
-  cardIssuer          String?
-  paymentAt           DateTime?
-  failedReason        String?
-  refundAmount        Float?    @default(0)
-  refundedAt          DateTime?
-  refundTransactionId String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  // Relations
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  user    User    @relation("UserPayments", fields: [userId], references: [id], onDelete: Cascade)
-  listing Listing @relation("ListingPayments", fields: [listingId], references: [id], onDelete: Cascade)
-  refunds RefundLog[]
-
-  @@map("booking_payments")
-}
-
-model RefundLog {
-  id              String   @id @default(cuid())
-  paymentId       String
-  amount          Float
-  reason          String
-  requestedBy     String   // USER, LANDLORD, ADMIN
-  processedBy     String
-  transactionId   String?
-  status          String   @default("PENDING") // PENDING, COMPLETED, FAILED
-  failureReason   String?
-  createdAt       DateTime @default(now())
-
-  // Relations
-  payment BookingPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-
-  @@map("refund_logs")
-}
-
-model NotificationModel {
-  id         String   @id @default(cuid())
-  userId     String
-  type       String
-  title      String
-  message    String
-  data       Json?
-  isRead     Boolean  @default(false)
-  priority   String
-  category   String
-  actionUrl  String?
-  expiresAt  DateTime?
-  createdAt  DateTime @default(now())
-  readAt     DateTime?
-
-  // Relations
-  user       User                     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
-  deliveries NotificationDelivery[]
-
-  @@map("notifications")
-}
-
-model NotificationPreferences {
-  userId                String   @id
-  emailEnabled          Boolean  @default(true)
-  emailBookings         Boolean  @default(true)
-  emailListings         Boolean  @default(true)
-  emailMessages         Boolean  @default(false)
-  emailRecommendations  Boolean  @default(true)
-  emailMarketing        Boolean  @default(false)
-  emailSecurity         Boolean  @default(true)
-  pushEnabled           Boolean  @default(true)
-  pushBookings          Boolean  @default(true)
-  pushListings          Boolean  @default(true)
-  pushMessages          Boolean  @default(true)
-  pushRecommendations   Boolean  @default(false)
-  pushMarketing         Boolean  @default(false)
-  inAppEnabled          Boolean  @default(true)
-  inAppBookings         Boolean  @default(true)
-  inAppListings         Boolean  @default(true)
-  inAppMessages         Boolean  @default(true)
-  inAppRecommendations  Boolean  @default(true)
-  inAppMarketing        Boolean  @default(false)
-  smsEnabled            Boolean  @default(false)
-  smsBookings           Boolean  @default(false)
-  smsEmergency          Boolean  @default(true)
-  quietHoursEnabled     Boolean  @default(false)
-  quietHoursStart       String   @default("22:00")
-  quietHoursEnd         String   @default("08:00")
-  timezone              String   @default("Asia/Dhaka")
-  digestEnabled         Boolean  @default(false)
-  digestFrequency       String   @default("WEEKLY")
-  updatedAt             DateTime @updatedAt @default(now())
-
-  // Relations
-  user User @relation("UserNotificationPreferences", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("notification_preferences")
-}
-
-model NotificationDelivery {
-  id             String   @id @default(cuid())
-  notificationId String
-  channel        String   // EMAIL, PUSH, SMS, IN_APP
-  status         String   @default("PENDING") // PENDING, SENT, DELIVERED, FAILED, BOUNCED
-  provider       String?
-  externalId     String?
-  errorMessage   String?
-  sentAt         DateTime?
-  deliveredAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relations
-  notification NotificationModel @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-
-  @@map("notification_deliveries")
-}
-
-model PushSubscription {
-  id         String   @id @default(cuid())
-  userId     String
-  endpoint   String   @unique
-  p256dh     String
-  auth       String
-  userAgent  String?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  lastUsed   DateTime?
-
-  // Relations
-  user User @relation("UserPushSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("push_subscriptions")
-}
-
-model SavedSearch {
-  id           String    @id @default(cuid())
-  userId       String
-  name         String
-  filters      String    // JSON string of SearchFilters
-  alertEnabled Boolean   @default(true)
-  lastNotified DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  // Relations
-  user User @relation("UserSavedSearches", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("saved_searches")
-}
-
-model SearchAnalytics {
-  id              String   @id @default(cuid())
-  searchId        String   @unique
-  userId          String?
-  query           String
-  filters         String   // JSON string of SearchFilters
-  resultCount     Int
-  clickedListings Json     // Array of listing IDs that were clicked (stored as JSON)
-  searchTime      Int      // Time taken for search in milliseconds
-  userAgent       String?
-  ipAddress       String?
-  sessionId       String?
-  timestamp       DateTime @default(now())
-
-  // Relations
-  user User? @relation("UserSearchAnalytics", fields: [userId], references: [id], onDelete: SetNull)
-
-  @@map("search_analytics")
 }
 
 enum ThreadType {
@@ -497,127 +1012,6 @@ enum ParticipantRole {
   MEMBER
   ADMIN
 }
-
-
-
-model MessageReadReceipt {
-  id            String   @id @default(cuid())
-  messageId     String
-  participantId String
-  readAt        DateTime @default(now())
-
-  // Relations
-  message     ChatMessage     @relation("MessageReadReceipts", fields: [messageId], references: [id], onDelete: Cascade)
-  participant ChatParticipant @relation("ParticipantReadReceipts", fields: [participantId], references: [id], onDelete: Cascade)
-
-  @@unique([messageId, participantId])
-  @@map("message_read_receipts")
-}
-
-model MessageAttachment {
-  id           String @id @default(cuid())
-  messageId    String
-  fileName     String
-  fileUrl      String
-  fileType     String
-  fileSize     Int
-  thumbnailUrl String?
-
-  // Relations
-  message ChatMessage @relation("MessageAttachments", fields: [messageId], references: [id], onDelete: Cascade)
-
-  @@map("message_attachments")
-}
-
-model ChatSettings {
-  id     String @id @default(cuid())
-  userId String @unique
-
-  // Notification preferences
-  enablePushNotifications  Boolean @default(true)
-  enableEmailNotifications Boolean @default(true)
-  enableSoundNotifications Boolean @default(true)
-
-  // Privacy settings
-  allowMessagesFromStrangers Boolean @default(true)
-  showOnlineStatus           Boolean @default(true)
-  showReadReceipts           Boolean @default(true)
-  showTypingIndicators       Boolean @default(true)
-
-  // Display preferences
-  theme       String  @default("auto") // light, dark, auto
-  fontSize    String  @default("medium") // small, medium, large
-  compactMode Boolean @default(false)
-
-  // Auto-archive settings
-  autoArchiveAfterDays      Int?
-  autoDeleteMessagesAfterDays Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user User @relation("UserChatSettings", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("chat_settings")
-}
-
-model BlockedUser {
-  id            String   @id @default(cuid())
-  userId        String
-  blockedUserId String
-  reason        String?
-  blockedAt     DateTime @default(now())
-
-  // Relations
-  user        User @relation("UserBlocked", fields: [userId], references: [id], onDelete: Cascade)
-  blockedUser User @relation("UserBlockedBy", fields: [blockedUserId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, blockedUserId])
-  @@map("blocked_users")
-}
-
-model ChatReport {
-  id          String   @id @default(cuid())
-  reporterId  String
-  threadId    String
-  messageId   String?
-  reason      String
-  description String
-  status      String   @default("PENDING") // PENDING, REVIEWED, RESOLVED, DISMISSED
-  reviewedAt  DateTime?
-  reviewedBy  String?
-  createdAt   DateTime @default(now())
-
-  // Relations
-  reporter User       @relation("UserChatReports", fields: [reporterId], references: [id], onDelete: Cascade)
-  thread   ChatThread @relation("ThreadReports", fields: [threadId], references: [id], onDelete: Cascade)
-  message  ChatMessage? @relation("MessageReports", fields: [messageId], references: [id], onDelete: Cascade)
-
-  @@map("chat_reports")
-}
-
-model ChatAnalytics {
-  id                   String   @id @default(cuid())
-  userId               String
-  threadId             String
-  messagesSent         Int      @default(0)
-  messagesReceived     Int      @default(0)
-  averageResponseTime  Float    @default(0) // in minutes
-  totalChatTime        Float    @default(0) // in minutes
-  lastActivityAt       DateTime @default(now())
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  // Relations
-  user   User       @relation("UserChatAnalytics", fields: [userId], references: [id], onDelete: Cascade)
-  thread ChatThread @relation("ThreadAnalytics", fields: [threadId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, threadId])
-  @@map("chat_analytics")
-}
-
-// Payment and Subscription System Models
 
 enum PaymentProvider {
   STRIPE
@@ -686,251 +1080,6 @@ enum Currency {
   INR
 }
 
-model PaymentMethod {
-  id               String            @id @default(cuid())
-  userId           String
-  type             PaymentMethodType
-  provider         PaymentProvider
-  providerMethodId String // Stripe payment method ID, PayPal method ID, etc.
-  
-  // Card details (when applicable)
-  cardLast4    String?
-  cardBrand    String?
-  cardExpMonth Int?
-  cardExpYear  Int?
-  cardCountry  String?
-  
-  // Bank account details (when applicable)
-  bankName        String?
-  bankLast4       String?
-  bankAccountType String?
-  
-  // Digital wallet details
-  walletType String? // apple_pay, google_pay, etc.
-  
-  // Metadata
-  isDefault  Boolean @default(false)
-  isVerified Boolean @default(false)
-  nickname   String?
-  
-  // Billing address (stored as JSON)
-  billingAddress Json?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user           User            @relation("UserPaymentMethods", fields: [userId], references: [id], onDelete: Cascade)
-  paymentIntents PaymentIntent[] @relation("PaymentMethodIntents")
-  transactions   Transaction[]   @relation("PaymentMethodTransactions")
-  subscriptions  Subscription[]  @relation("SubscriptionPaymentMethods")
-
-  @@map("payment_methods")
-}
-
-model PaymentIntent {
-  id               String        @id @default(cuid())
-  userId           String
-  amount           Int // Amount in cents
-  currency         Currency
-  status           PaymentStatus
-  provider         PaymentProvider
-  providerIntentId String // Stripe payment intent ID
-  
-  // Associated resources
-  paymentMethodId String?
-  subscriptionId  String?
-  listingId       String?
-  bookingId       String?
-  
-  // Payment details
-  description  String?
-  receiptEmail String?
-  metadata     Json? // Stored as JSON
-  
-  // Provider-specific data
-  clientSecret String? // For client-side confirmation
-  
-  // Timestamps
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  confirmedAt DateTime?
-  canceledAt  DateTime?
-
-  // Relations
-  user          User           @relation("UserPaymentIntents", fields: [userId], references: [id], onDelete: Cascade)
-  paymentMethod PaymentMethod? @relation("PaymentMethodIntents", fields: [paymentMethodId], references: [id])
-  subscription  Subscription?  @relation("SubscriptionPaymentIntents", fields: [subscriptionId], references: [id])
-  listing       Listing?       @relation("ListingPaymentIntents", fields: [listingId], references: [id])
-  booking       Booking?       @relation("BookingPaymentIntents", fields: [bookingId], references: [id])
-  transactions  Transaction[]  @relation("PaymentIntentTransactions")
-
-  @@map("payment_intents")
-}
-
-model Transaction {
-  id                     String          @id @default(cuid())
-  userId                 String
-  type                   TransactionType
-  status                 PaymentStatus
-  amount                 Int // Amount in cents
-  currency               Currency
-  
-  // Associated resources
-  paymentIntentId String?
-  paymentMethodId String?
-  subscriptionId  String?
-  listingId       String?
-  bookingId       String?
-  refundId        String? // For refund transactions
-  
-  // Transaction details
-  description String
-  metadata    Json? // Stored as JSON
-  
-  // Provider information
-  provider              PaymentProvider
-  providerTransactionId String?
-  providerFee           Int? // Fee in cents
-  
-  // Financial details
-  grossAmount Int // Gross amount in cents
-  feeAmount   Int // Fee amount in cents
-  netAmount   Int // Net amount in cents
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  processedAt DateTime?
-
-  // Relations
-  user          User           @relation("UserTransactions", fields: [userId], references: [id], onDelete: Cascade)
-  paymentIntent PaymentIntent? @relation("PaymentIntentTransactions", fields: [paymentIntentId], references: [id])
-  paymentMethod PaymentMethod? @relation("PaymentMethodTransactions", fields: [paymentMethodId], references: [id])
-  subscription  Subscription?  @relation("SubscriptionTransactions", fields: [subscriptionId], references: [id])
-  listing       Listing?       @relation("ListingTransactions", fields: [listingId], references: [id])
-  booking       Booking?       @relation("BookingTransactions", fields: [bookingId], references: [id])
-
-  @@map("transactions")
-}
-
-model Subscription {
-  id                     String             @id @default(cuid())
-  userId                 String
-  plan                   SubscriptionPlan
-  status                 SubscriptionStatus
-  
-  // Provider information
-  provider               PaymentProvider
-  providerSubscriptionId String
-  providerCustomerId     String
-  
-  // Billing details
-  currentPeriodStart   DateTime
-  currentPeriodEnd     DateTime
-  billingCycleAnchor   DateTime?
-  
-  // Payment details
-  defaultPaymentMethodId String?
-  currency               Currency
-  
-  // Pricing
-  unitAmount Int // Amount in cents
-  quantity   Int @default(1)
-  
-  // Trial information
-  trialStart DateTime?
-  trialEnd   DateTime?
-  
-  // Cancellation
-  cancelAtPeriodEnd   Boolean @default(false)
-  canceledAt          DateTime?
-  cancellationReason  String?
-  
-  // Metadata
-  metadata Json? // Stored as JSON
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user                User            @relation("UserSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
-  defaultPaymentMethod PaymentMethod? @relation("SubscriptionPaymentMethods", fields: [defaultPaymentMethodId], references: [id])
-  paymentIntents      PaymentIntent[] @relation("SubscriptionPaymentIntents")
-  transactions        Transaction[]   @relation("SubscriptionTransactions")
-  invoices            Invoice[]       @relation("SubscriptionInvoices")
-
-  @@map("subscriptions")
-}
-
-model Invoice {
-  id                 String        @id @default(cuid())
-  userId             String
-  subscriptionId     String?
-  status             InvoiceStatus
-  
-  // Provider information
-  provider           PaymentProvider
-  providerInvoiceId  String
-  
-  // Invoice details
-  invoiceNumber String
-  description   String?
-  currency      Currency
-  
-  // Amounts (all in cents)
-  subtotal       Int
-  taxAmount      Int @default(0)
-  discountAmount Int @default(0)
-  total          Int
-  amountPaid     Int @default(0)
-  amountDue      Int
-  
-  // Dates
-  periodStart DateTime
-  periodEnd   DateTime
-  dueDate     DateTime?
-  paidAt      DateTime?
-  voidedAt    DateTime?
-  
-  // Payment attempt
-  attemptCount       Int       @default(0)
-  nextPaymentAttempt DateTime?
-  
-  // Invoice items (stored as JSON array)
-  items Json // Array of InvoiceItem objects
-  
-  // Files
-  invoicePdf    String? // URL to PDF
-  receiptNumber String?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user         User          @relation("UserInvoices", fields: [userId], references: [id], onDelete: Cascade)
-  subscription Subscription? @relation("SubscriptionInvoices", fields: [subscriptionId], references: [id])
-
-  @@map("invoices")
-}
-
-model WebhookEvent {
-  id          String          @id @default(cuid())
-  type        String
-  provider    PaymentProvider
-  data        Json // Webhook payload stored as JSON
-  processed   Boolean         @default(false)
-  error       String?
-  attempts    Int             @default(0)
-  maxAttempts Int             @default(3)
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("webhook_events")
-}
-
-// Analytics Models
-
 enum DeviceType {
   DESKTOP
   MOBILE
@@ -967,294 +1116,4 @@ enum TrendDirection {
   DOWN
   STABLE
   VOLATILE
-}
-
-model UserAnalytics {
-  id              String      @id @default(cuid())
-  userId          String?
-  sessionId       String
-  userAgent       String
-  ipAddress       String?
-  country         String?
-  city            String?
-  device          DeviceType
-  browser         String
-  referrer        String?
-  landingPage     String
-  sessionDuration Int         @default(0) // in seconds
-  pageViews       Int         @default(0)
-  actionsPerformed Json       // Array of UserAction objects
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user User? @relation("UserAnalyticsData", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([sessionId])
-  @@index([createdAt])
-  @@map("user_analytics")
-}
-
-model UserAction {
-  id        String     @id @default(cuid())
-  userId    String?
-  sessionId String
-  type      ActionType
-  target    String     // listing ID, search query, etc.
-  metadata  Json?      // Additional action-specific data
-  page      String
-  duration  Int?       // in seconds
-  timestamp DateTime   @default(now())
-  
-  // Relations
-  user User? @relation("UserActionHistory", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([sessionId])
-  @@index([type])
-  @@index([timestamp])
-  @@map("user_actions")
-}
-
-model ListingAnalytics {
-  id                     String   @id @default(cuid())
-  listingId              String   @unique
-  views                  Int      @default(0)
-  uniqueViews            Int      @default(0)
-  inquiries              Int      @default(0)
-  bookings               Int      @default(0)
-  conversionRate         Float    @default(0.0)
-  averageViewDuration    Int      @default(0) // in seconds
-  impressions            Int      @default(0)
-  clickThroughRate       Float    @default(0.0)
-  favoriteCount          Int      @default(0)
-  shareCount             Int      @default(0)
-  contactAttempts        Int      @default(0)
-  
-  // Analytics data stored as JSON for flexibility
-  photoViews             Json     // Array of PhotoViewAnalytics
-  searchRankings         Json     // Array of SearchRankingData
-  geographicViews        Json     // Array of GeographicViewData
-  timeBasedViews         Json     // Array of TimeBasedViewData
-  competitorAnalysis     Json?    // CompetitorAnalysis object
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  listing Listing @relation("ListingAnalyticsData", fields: [listingId], references: [id], onDelete: Cascade)
-
-  @@index([listingId])
-  @@index([views])
-  @@index([conversionRate])
-  @@map("listing_analytics")
-}
-
-model PaymentAnalytics {
-  id                         String   @id @default(cuid())
-  period                     String   // e.g., "2024-01", "2024-Q1"
-  totalRevenue               Float    @default(0.0)
-  transactionCount           Int      @default(0)
-  averageTransactionValue    Float    @default(0.0)
-  successRate                Float    @default(0.0)
-  failureRate                Float    @default(0.0)
-  refundRate                 Float    @default(0.0)
-  processingFees             Float    @default(0.0)
-  netRevenue                 Float    @default(0.0)
-  
-  // Analytics data stored as JSON
-  paymentMethodDistribution  Json     // Array of PaymentMethodStats
-  monthlyRevenue             Json     // Array of MonthlyRevenueData
-  geographicRevenue          Json     // Array of GeographicRevenueData
-  userTypeRevenue            Json     // Array of UserTypeRevenueData
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([period])
-  @@index([period])
-  @@index([totalRevenue])
-  @@map("payment_analytics")
-}
-
-
-
-model GeographicAnalytics {
-  id                String      @id @default(cuid())
-  location          String
-  city              String
-  area              String
-  coordinates       Json        // {lat: number, lng: number}
-  listingCount      Int         @default(0)
-  averagePrice      Float       @default(0.0)
-  priceRange        Json        // {min: number, max: number}
-  demandLevel       DemandLevel @default(MODERATE)
-  searchVolume      Int         @default(0)
-  bookingRate       Float       @default(0.0)
-  popularAmenities  Json        // Array of strings
-  competitionLevel  String      @default("MODERATE") // LOW, MODERATE, HIGH, SATURATED
-  growthRate        Float       @default(0.0)
-  trendingDirection TrendDirection @default(STABLE)
-  
-  // Analytics data stored as JSON
-  demographics      Json        // DemographicData object
-  marketInsights    Json        // Array of MarketInsight objects
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([location])
-  @@index([city])
-  @@index([area])
-  @@index([demandLevel])
-  @@index([averagePrice])
-  @@map("geographic_analytics")
-}
-
-model AdminAnalytics {
-  id                         String   @id @default(cuid())
-  period                     String   // e.g., "2024-01-15", "2024-01"
-  totalUsers                 Int      @default(0)
-  activeUsers                Int      @default(0)
-  newUsersToday              Int      @default(0)
-  newUsersThisMonth          Int      @default(0)
-  totalListings              Int      @default(0)
-  activeListings             Int      @default(0)
-  newListingsToday           Int      @default(0)
-  totalBookings              Int      @default(0)
-  completedBookings          Int      @default(0)
-  cancelledBookings          Int      @default(0)
-  totalRevenue               Float    @default(0.0)
-  monthlyRevenue             Float    @default(0.0)
-  averageBookingValue        Float    @default(0.0)
-  platformGrowthRate         Float    @default(0.0)
-  userRetentionRate          Float    @default(0.0)
-  listingSuccessRate         Float    @default(0.0)
-  customerSatisfactionScore  Float    @default(0.0)
-  
-  // Analytics data stored as JSON
-  supportTickets            Json     // SupportTicketStats object
-  topPerformingAreas        Json     // Array of AreaPerformanceData
-  userEngagementMetrics     Json     // UserEngagementData object
-  systemHealthMetrics       Json     // SystemHealthData object
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([period])
-  @@index([period])
-  @@index([totalRevenue])
-  @@index([platformGrowthRate])
-  @@map("admin_analytics")
-}
-
-model LandlordAnalytics {
-  id                    String   @id @default(cuid())
-  landlordId            String
-  period                String   // e.g., "2024-01"
-  totalListings         Int      @default(0)
-  activeListings        Int      @default(0)
-  totalViews            Int      @default(0)
-  totalInquiries        Int      @default(0)
-  totalBookings         Int      @default(0)
-  conversionRate        Float    @default(0.0)
-  averageRating         Float    @default(0.0)
-  totalRevenue          Float    @default(0.0)
-  monthlyRevenue        Float    @default(0.0)
-  occupancyRate         Float    @default(0.0)
-  responseTime          Int      @default(0) // in minutes
-  responseRate          Float    @default(0.0)
-  customerSatisfaction  Float    @default(0.0)
-  
-  // Analytics data stored as JSON
-  topPerformingListings Json     // Array of ListingPerformanceData
-  monthlyMetrics        Json     // Array of MonthlyLandlordData
-  competitorComparison  Json     // CompetitorComparisonData object
-  marketPosition        Json     // MarketPositionData object
-  recommendations       Json     // Array of LandlordRecommendation
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  landlord User @relation("LandlordAnalyticsData", fields: [landlordId], references: [id], onDelete: Cascade)
-
-  @@unique([landlordId, period])
-  @@index([landlordId])
-  @@index([period])
-  @@index([conversionRate])
-  @@index([totalRevenue])
-  @@map("landlord_analytics")
-}
-
-model AnalyticsInsight {
-  id                String   @id @default(cuid())
-  type              String   // OPPORTUNITY, WARNING, TREND, ANOMALY, RECOMMENDATION
-  category          String   // USER_BEHAVIOR, LISTING_PERFORMANCE, etc.
-  title             String
-  description       String
-  confidence        Float    @default(0.0)
-  impact            String   // LOW, MEDIUM, HIGH, CRITICAL
-  actionable        Boolean  @default(false)
-  recommendation    String?
-  relatedMetrics    Json     // Array of metric names
-  userId            String?  // If insight is user-specific
-  listingId         String?  // If insight is listing-specific
-  
-  acknowledged      Boolean  @default(false)
-  acknowledgedBy    String?
-  acknowledgedAt    DateTime?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user    User?    @relation("UserInsights", fields: [userId], references: [id], onDelete: Cascade)
-  listing Listing? @relation("ListingInsights", fields: [listingId], references: [id], onDelete: Cascade)
-
-  @@index([type])
-  @@index([category])
-  @@index([impact])
-  @@index([createdAt])
-  @@index([userId])
-  @@index([listingId])
-  @@map("analytics_insights")
-}
-
-model AnalyticsAlert {
-  id            String   @id @default(cuid())
-  type          String   // PERFORMANCE_DEGRADATION, THRESHOLD_EXCEEDED, etc.
-  severity      String   // INFO, WARNING, ERROR, CRITICAL
-  title         String
-  description   String
-  metric        String
-  threshold     Float
-  actualValue   Float
-  userId        String?
-  listingId     String?
-  
-  acknowledged  Boolean  @default(false)
-  resolved      Boolean  @default(false)
-  acknowledgedBy String?
-  resolvedBy     String?
-  acknowledgedAt DateTime?
-  resolvedAt     DateTime?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user    User?    @relation("UserAlerts", fields: [userId], references: [id], onDelete: Cascade)
-  listing Listing? @relation("ListingAlerts", fields: [listingId], references: [id], onDelete: Cascade)
-
-  @@index([type])
-  @@index([severity])
-  @@index([acknowledged])
-  @@index([resolved])
-  @@index([createdAt])
-  @@index([userId])
-  @@index([listingId])
-  @@map("analytics_alerts")
 }

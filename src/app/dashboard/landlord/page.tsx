@@ -9,6 +9,31 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ListingCard } from '@/components/ui/ListingCard';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   Building, 
   DollarSign, 
@@ -23,7 +48,27 @@ import {
   TrendingUp,
   MapPin,
   Phone,
-  Mail
+  Mail,
+  Settings,
+  Trash2,
+  Download,
+  Upload,
+  Search,
+  Filter,
+  MoreHorizontal,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Home,
+  CreditCard,
+  Activity,
+  Bell,
+  Shield,
+  RefreshCw,
+  FileText,
+  Image as ImageIcon,
+  Save,
+  X
 } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -46,6 +91,7 @@ interface Listing {
   id: string;
   title: string;
   location: string;
+  address?: string;
   rent: number;
   images: string[];
   isAvailable: boolean;
@@ -53,8 +99,74 @@ interface Listing {
   views: number;
   favorites: number;
   bookings: number;
-  rating: number;
+  rating?: number;
+  description?: string;
+  amenities?: string[];
+  size?: number;
+  deposit?: number;
   createdAt: string;
+  updatedAt?: string;
+  status: 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'REJECTED';
+}
+
+interface Tenant {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  profilePicture?: string;
+  currentListing?: {
+    id: string;
+    title: string;
+    rent: number;
+  };
+  leaseStart?: string;
+  leaseEnd?: string;
+  rentStatus: 'PAID' | 'PENDING' | 'OVERDUE';
+  lastPayment?: string;
+  totalPaid: number;
+}
+
+interface MaintenanceRequest {
+  id: string;
+  listingId: string;
+  listingTitle: string;
+  tenantId: string;
+  tenantName: string;
+  title: string;
+  description: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  category: 'PLUMBING' | 'ELECTRICAL' | 'HVAC' | 'APPLIANCE' | 'STRUCTURAL' | 'OTHER';
+  createdAt: string;
+  completedAt?: string;
+  estimatedCost?: number;
+  actualCost?: number;
+  images?: string[];
+}
+
+interface FinancialData {
+  monthlyRevenue: number;
+  yearlyRevenue: number;
+  totalEarnings: number;
+  pendingPayments: number;
+  expenses: number;
+  netIncome: number;
+  occupancyRate: number;
+  averageRent: number;
+  revenueGrowth: number;
+}
+
+interface Review {
+  id: string;
+  listingId: string;
+  listingTitle: string;
+  reviewerName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+  response?: string;
+  respondedAt?: string;
 }
 
 interface Booking {
@@ -91,12 +203,51 @@ interface Analytics {
 
 export default function LandlordDashboard() {
   const { data: session, status } = useSession();
+  
+  // Core state
   const [profile, setProfile] = useState<LandlordProfile | null>(null);
   const [listings, setListings] = useState<Listing[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // Extended management state
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
+  const [financialData, setFinancialData] = useState<FinancialData | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  
+  // UI state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
+  const [editingListing, setEditingListing] = useState<Listing | null>(null);
+  const [showCreateListing, setShowCreateListing] = useState(false);
+  const [showMaintenanceDetails, setShowMaintenanceDetails] = useState<MaintenanceRequest | null>(null);
+  const [showTenantDetails, setShowTenantDetails] = useState<Tenant | null>(null);
+  
+  // Form states
+  const [listingForm, setListingForm] = useState({
+    title: '',
+    description: '',
+    rent: '',
+    deposit: '',
+    location: '',
+    address: '',
+    roomType: '',
+    size: '',
+    amenities: [] as string[],
+    images: [] as string[],
+    isAvailable: true
+  });
+  
+  // Alerts and notifications
+  const [alerts, setAlerts] = useState<Array<{
+    id: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+    message: string;
+  }>>([]);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -109,11 +260,24 @@ export default function LandlordDashboard() {
   const fetchDashboardData = async () => {
     try {
       setIsLoading(true);
-      const [profileRes, listingsRes, bookingsRes, analyticsRes] = await Promise.all([
+      const [
+        profileRes, 
+        listingsRes, 
+        bookingsRes, 
+        analyticsRes,
+        tenantsRes,
+        maintenanceRes,
+        financialRes,
+        reviewsRes
+      ] = await Promise.all([
         fetch('/api/users/profile'),
         fetch('/api/listings/my-listings'),
         fetch('/api/bookings/landlord'),
-        fetch('/api/analytics/landlord')
+        fetch('/api/analytics/landlord'),
+        fetch('/api/landlord/tenants'),
+        fetch('/api/landlord/maintenance'),
+        fetch('/api/landlord/financial'),
+        fetch('/api/landlord/reviews')
       ]);
 
       if (profileRes.ok) {
@@ -132,12 +296,160 @@ export default function LandlordDashboard() {
         const analyticsData = await analyticsRes.json();
         setAnalytics(analyticsData.data || analyticsData);
       }
+      if (tenantsRes.ok) {
+        const tenantsData = await tenantsRes.json();
+        setTenants(Array.isArray(tenantsData.data) ? tenantsData.data : []);
+      }
+      if (maintenanceRes.ok) {
+        const maintenanceData = await maintenanceRes.json();
+        setMaintenanceRequests(Array.isArray(maintenanceData.data) ? maintenanceData.data : []);
+      }
+      if (financialRes.ok) {
+        const financialData = await financialRes.json();
+        setFinancialData(financialData.data || financialData);
+      }
+      if (reviewsRes.ok) {
+        const reviewsData = await reviewsRes.json();
+        setReviews(Array.isArray(reviewsData.data) ? reviewsData.data : []);
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      addAlert('error', 'Failed to load dashboard data');
     } finally {
       setIsLoading(false);
     }
   };
+
+  // CRUD Operations
+  const createListing = async (formData: typeof listingForm) => {
+    try {
+      const response = await fetch('/api/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      
+      if (response.ok) {
+        const newListing = await response.json();
+        setListings(prev => [newListing.data, ...prev]);
+        setShowCreateListing(false);
+        resetListingForm();
+        addAlert('success', 'Listing created successfully');
+      } else {
+        addAlert('error', 'Failed to create listing');
+      }
+    } catch (error) {
+      addAlert('error', 'Error creating listing');
+    }
+  };
+
+  const updateListing = async (id: string, updates: Partial<Listing>) => {
+    try {
+      const response = await fetch(`/api/listings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      
+      if (response.ok) {
+        const updatedListing = await response.json();
+        setListings(prev => prev.map(listing => 
+          listing.id === id ? updatedListing.data : listing
+        ));
+        setEditingListing(null);
+        addAlert('success', 'Listing updated successfully');
+      } else {
+        addAlert('error', 'Failed to update listing');
+      }
+    } catch (error) {
+      addAlert('error', 'Error updating listing');
+    }
+  };
+
+  const deleteListing = async (id: string) => {
+    try {
+      const response = await fetch(`/api/listings/${id}`, { method: 'DELETE' });
+      
+      if (response.ok) {
+        setListings(prev => prev.filter(listing => listing.id !== id));
+        addAlert('success', 'Listing deleted successfully');
+      } else {
+        addAlert('error', 'Failed to delete listing');
+      }
+    } catch (error) {
+      addAlert('error', 'Error deleting listing');
+    }
+  };
+
+  const updateMaintenanceRequest = async (id: string, status: MaintenanceRequest['status']) => {
+    try {
+      const response = await fetch(`/api/landlord/maintenance/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      
+      if (response.ok) {
+        setMaintenanceRequests(prev => prev.map(request => 
+          request.id === id ? { ...request, status } : request
+        ));
+        addAlert('success', 'Maintenance request updated');
+      }
+    } catch (error) {
+      addAlert('error', 'Error updating maintenance request');
+    }
+  };
+
+  const respondToReview = async (reviewId: string, response: string) => {
+    try {
+      const res = await fetch(`/api/landlord/reviews/${reviewId}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response })
+      });
+      
+      if (res.ok) {
+        setReviews(prev => prev.map(review => 
+          review.id === reviewId ? { ...review, response, respondedAt: new Date().toISOString() } : review
+        ));
+        addAlert('success', 'Response added successfully');
+      }
+    } catch (error) {
+      addAlert('error', 'Error responding to review');
+    }
+  };
+
+  // Utility functions
+  const addAlert = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setAlerts(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setAlerts(prev => prev.filter(alert => alert.id !== id));
+    }, 5000);
+  };
+
+  const resetListingForm = () => {
+    setListingForm({
+      title: '',
+      description: '',
+      rent: '',
+      deposit: '',
+      location: '',
+      address: '',
+      roomType: '',
+      size: '',
+      amenities: [],
+      images: [],
+      isAvailable: true
+    });
+  };
+
+  const filteredListings = listings.filter(listing => {
+    const matchesSearch = listing.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         listing.location.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filterStatus === 'all' || listing.status === filterStatus;
+    return matchesSearch && matchesFilter;
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -155,94 +467,166 @@ export default function LandlordDashboard() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <LoadingSpinner size="lg" text="Loading your dashboard..." />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Landlord Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your listings, bookings, and track your performance
-          </p>
-        </div>
-        <div className="flex gap-2 mt-4 md:mt-0">
-          <Link href="/dashboard/landlord/listings/new">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Listing
-            </Button>
-          </Link>
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Building className="h-8 w-8 text-blue-600" />
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900">Landlord Dashboard</h1>
+                  <p className="text-sm text-slate-600">Complete Property Management System</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Button 
+                onClick={() => setShowCreateListing(true)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Listing
+              </Button>
+              <Button variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Export Data
+              </Button>
+              <div className="relative">
+                <Bell className="h-5 w-5 text-slate-600" />
+                {maintenanceRequests.filter(r => r.status === 'PENDING').length > 0 && (
+                  <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Building className="h-8 w-8 text-blue-500" />
-              <div className="ml-4">
-                <p className="text-2xl font-bold">{listings.length}</p>
-                <p className="text-sm text-muted-foreground">Total Listings</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Calendar className="h-8 w-8 text-green-500" />
-              <div className="ml-4">
-                <p className="text-2xl font-bold">{bookings.length}</p>
-                <p className="text-sm text-muted-foreground">Active Bookings</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <DollarSign className="h-8 w-8 text-yellow-500" />
-              <div className="ml-4">
-                <p className="text-2xl font-bold">
-                  ৳{analytics?.totalRevenue?.toLocaleString() || '0'}
-                </p>
-                <p className="text-sm text-muted-foreground">Total Revenue</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Star className="h-8 w-8 text-purple-500" />
-              <div className="ml-4">
-                <p className="text-2xl font-bold">
-                  {analytics?.averageRating?.toFixed(1) || '0.0'}
-                </p>
-                <p className="text-sm text-muted-foreground">Avg Rating</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <div className="container mx-auto px-6 py-8 space-y-8">
+        {/* Alerts */}
+        {alerts.length > 0 && (
+          <div className="space-y-2">
+            {alerts.map(alert => (
+              <Alert key={alert.id} className={`
+                ${alert.type === 'success' ? 'border-green-200 bg-green-50' : ''}
+                ${alert.type === 'error' ? 'border-red-200 bg-red-50' : ''}
+                ${alert.type === 'warning' ? 'border-yellow-200 bg-yellow-50' : ''}
+                ${alert.type === 'info' ? 'border-blue-200 bg-blue-50' : ''}
+              `}>
+                <AlertDescription>{alert.message}</AlertDescription>
+              </Alert>
+            ))}
+          </div>
+        )}
 
-      {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="listings">My Listings</TabsTrigger>
-          <TabsTrigger value="bookings">Bookings</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-        </TabsList>
+        {/* Quick Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-blue-100 text-sm font-medium">Total Revenue</p>
+                  <p className="text-3xl font-bold">৳{financialData?.monthlyRevenue?.toLocaleString() || '0'}</p>
+                  <p className="text-blue-100 text-xs mt-1">This month</p>
+                </div>
+                <DollarSign className="h-12 w-12 text-blue-200" />
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Overview Tab */}
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-green-500 to-green-600 text-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-green-100 text-sm font-medium">Active Listings</p>
+                  <p className="text-3xl font-bold">{listings.filter(l => l.status === 'ACTIVE').length}</p>
+                  <p className="text-green-100 text-xs mt-1">
+                    {((listings.filter(l => l.status === 'ACTIVE').length / listings.length) * 100).toFixed(0)}% occupancy
+                  </p>
+                </div>
+                <Building className="h-12 w-12 text-green-200" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-purple-500 to-purple-600 text-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-purple-100 text-sm font-medium">Total Tenants</p>
+                  <p className="text-3xl font-bold">{tenants.length}</p>
+                  <p className="text-purple-100 text-xs mt-1">
+                    {tenants.filter(t => t.rentStatus === 'PAID').length} paid
+                  </p>
+                </div>
+                <Users className="h-12 w-12 text-purple-200" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-orange-500 to-orange-600 text-white">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-orange-100 text-sm font-medium">Pending Tasks</p>
+                  <p className="text-3xl font-bold">
+                    {maintenanceRequests.filter(r => r.status === 'PENDING').length}
+                  </p>
+                  <p className="text-orange-100 text-xs mt-1">Maintenance requests</p>
+                </div>
+                <Settings className="h-12 w-12 text-orange-200" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Comprehensive Management Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <Card className="border-0 shadow-lg bg-white">
+            <CardContent className="p-6">
+              <TabsList className="grid w-full grid-cols-7 bg-slate-100 p-1 rounded-lg">
+                <TabsTrigger value="overview" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <BarChart3 className="h-4 w-4" />
+                  <span>Overview</span>
+                </TabsTrigger>
+                <TabsTrigger value="listings" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <Building className="h-4 w-4" />
+                  <span>Listings</span>
+                </TabsTrigger>
+                <TabsTrigger value="tenants" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <Users className="h-4 w-4" />
+                  <span>Tenants</span>
+                </TabsTrigger>
+                <TabsTrigger value="bookings" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <Calendar className="h-4 w-4" />
+                  <span>Bookings</span>
+                </TabsTrigger>
+                <TabsTrigger value="maintenance" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <Settings className="h-4 w-4" />
+                  <span>Maintenance</span>
+                </TabsTrigger>
+                <TabsTrigger value="financial" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <DollarSign className="h-4 w-4" />
+                  <span>Financial</span>
+                </TabsTrigger>
+                <TabsTrigger value="reviews" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <Star className="h-4 w-4" />
+                  <span>Reviews</span>
+                </TabsTrigger>
+              </TabsList>
+            </CardContent>
+          </Card>
+
+          {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Profile Summary */}
@@ -636,7 +1020,8 @@ export default function LandlordDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </div>
     </div>
   );
 }

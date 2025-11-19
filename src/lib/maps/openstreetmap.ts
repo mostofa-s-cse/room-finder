@@ -6,6 +6,7 @@ import { MapLocation, MapMarker, MapConfig, HeatmapPoint } from './types';
 export class OpenStreetMapService {
   private static instance: OpenStreetMapService;
   private leafletLoaded = false;
+  private mapInstances = new WeakMap<HTMLElement, Map>();
 
   private constructor() {}
 
@@ -43,25 +44,17 @@ export class OpenStreetMapService {
     await this.loadLeaflet();
     const L = await import('leaflet');
 
-    // Check if container already has a map instance and remove it
-    const existingMap = (container as any)._leaflet_id;
-    if (existingMap) {
-      // Remove existing map
-      const mapInstance = (L as any).map(container);
-      if (mapInstance && mapInstance.remove) {
-        mapInstance.remove();
-      }
-      // Clear the container
-      container.innerHTML = '';
-      // Remove Leaflet's internal reference
-      delete (container as any)._leaflet_id;
-    }
+    // Use the cleanup method to properly remove any existing map
+    this.cleanupMap(container);
 
     const map = L.map(container, {
       center: [config.center.lat, config.center.lng],
       zoom: config.zoom,
       zoomControl: config.zoomControl !== false,
     });
+
+    // Store map instance for proper cleanup
+    this.mapInstances.set(container, map);
 
     // Add OpenStreetMap tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -70,6 +63,26 @@ export class OpenStreetMapService {
     }).addTo(map);
 
     return map;
+  }
+
+  cleanupMap(container: HTMLElement): void {
+    const existingMap = this.mapInstances.get(container);
+    if (existingMap) {
+      existingMap.remove();
+      this.mapInstances.delete(container);
+    }
+    
+    // Clear container and Leaflet references
+    if ((container as any)._leaflet_id) {
+      container.innerHTML = '';
+      delete (container as any)._leaflet_id;
+      const containerAny = container as any;
+      Object.keys(containerAny).forEach(key => {
+        if (key.startsWith('_leaflet')) {
+          delete containerAny[key];
+        }
+      });
+    }
   }
 
   async addMarkers(map: Map, markers: MapMarker[]): Promise<Marker[]> {

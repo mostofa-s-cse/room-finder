@@ -36,7 +36,12 @@ export const listingSchema = z.object({
   roomType: z.enum(['SINGLE', 'SHARED'], {
     message: 'Please select room type',
   }),
-  amenities: z.array(z.string()).min(1, 'Please select at least one amenity'),
+  amenities: z.array(z.string()).optional().default([]),
+  images: z.array(z.string()).optional().default([]),
+  availableFrom: z.string().optional(),
+  rules: z.array(z.string()).optional().default([]),
+  contactPhone: z.string().optional(),
+  contactEmail: z.string().email().optional().or(z.literal('')),
 });
 
 export const reviewSchema = z.object({

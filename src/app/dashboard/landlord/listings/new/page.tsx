@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,20 +16,22 @@ import {
   DollarSign, 
   Home, 
   Check,
-  Plus,
   Image as ImageIcon
 } from 'lucide-react';
+import Image from 'next/image';
 import { redirect } from 'next/navigation';
 import { toast } from 'sonner';
+import { ErrorDisplay, useApiError } from '@/components/common/ErrorDisplay';
 
 interface ListingFormData {
   title: string;
   description: string;
-  rent: number;
-  location: string;
+  price: number;
+  city: string;
+  address: string;
   latitude?: number;
   longitude?: number;
-  roomType: 'SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT' | '';
+  roomType: 'SINGLE' | 'SHARED' | '';
   availableFrom: string;
   images: string[];
   amenities: string[];
@@ -62,8 +64,9 @@ export default function NewListingPage() {
   const [formData, setFormData] = useState<ListingFormData>({
     title: '',
     description: '',
-    rent: 0,
-    location: '',
+    price: 0,
+    city: '',
+    address: '',
     roomType: '',
     availableFrom: '',
     images: [],
@@ -75,6 +78,10 @@ export default function NewListingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState(1);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const { error: apiError, success: apiSuccess, handleError, handleSuccess, clearMessages } = useApiError();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (status === 'loading') {
     return <LoadingSpinner size="lg" text="Loading..." />;
@@ -110,16 +117,94 @@ export default function NewListingPage() {
     if (files.length === 0) return;
     
     setUploadingImages(true);
-    try {
-      // Simulate image upload - in real app, upload to cloud storage
-      const newImages = Array.from(files).map((file, index) => 
-        URL.createObjectURL(file) // Temporary - use actual upload URLs
-      );
+    setUploadSuccess(null); // Clear previous success message
+    const uploadedImages: string[] = [];
+    const validFiles: File[] = [];
+    
+    // Validate all files first
+    for (const file of Array.from(files)) {
+      // Validate file size (max 5MB per image)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`File ${file.name} is too large. Maximum size is 5MB.`);
+        continue;
+      }
       
-      handleInputChange('images', [...formData.images, ...newImages]);
-      toast.success(`${files.length} image(s) uploaded successfully`);
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error(`File ${file.name} is not a valid image.`);
+        continue;
+      }
+      
+      validFiles.push(file);
+    }
+    
+    if (validFiles.length === 0) {
+      setUploadingImages(false);
+      return;
+    }
+    
+    try {
+      // Create FormData for multiple files
+      const uploadFormData = new FormData();
+      validFiles.forEach(file => {
+        uploadFormData.append('file', file);
+      });
+      
+      // Upload to API endpoint
+      console.log('Uploading files:', validFiles.map(f => f.name));
+      const uploadResponse = await fetch('/api/upload/image', {
+        method: 'POST',
+        body: uploadFormData
+      });
+      
+      console.log('Upload response status:', uploadResponse.status);
+      
+      if (uploadResponse.ok) {
+        const result = await uploadResponse.json();
+        console.log('Upload result:', result);
+        
+        if (result.success && result.urls) {
+          uploadedImages.push(...result.urls);
+        } else if (result.success && result.url) {
+          // Handle single URL response
+          uploadedImages.push(result.url);
+        }
+        
+        // Show any partial errors
+        if (result.errors && result.errors.length > 0) {
+          result.errors.forEach((error: string) => toast.error(error));
+        }
+      } else {
+        const errorResult = await uploadResponse.json().catch(() => ({ error: { message: 'Unknown upload error', code: 'UPLOAD_ERROR' } }));
+        console.error('Upload failed:', errorResult);
+        handleError(errorResult);
+        toast.error(errorResult.error?.message || errorResult.message || 'Upload failed');
+      }
+      
+      if (uploadedImages.length > 0) {
+        handleInputChange('images', [...formData.images, ...uploadedImages]);
+        const successMessage = `${uploadedImages.length} image(s) uploaded successfully`;
+        setUploadSuccess(successMessage);
+        toast.success(successMessage);
+        
+        // Clear success message after 5 seconds
+        setTimeout(() => setUploadSuccess(null), 5000);
+      } else {
+        toast.error('No images were uploaded successfully');
+      }
     } catch (error) {
-      toast.error('Failed to upload images');
+      console.error('Image upload error:', error);
+      // Fallback: Create temporary URLs for development
+      validFiles.forEach(file => {
+        uploadedImages.push(URL.createObjectURL(file));
+      });
+      
+      if (uploadedImages.length > 0) {
+        handleInputChange('images', [...formData.images, ...uploadedImages]);
+        toast.success(`${uploadedImages.length} image(s) added (temporary URLs)`);
+      } else {
+        toast.error('Failed to upload images');
+      }
     } finally {
       setUploadingImages(false);
     }
@@ -134,19 +219,52 @@ export default function NewListingPage() {
     const newErrors: Record<string, string> = {};
 
     if (stepNumber === 1) {
-      if (!formData.title.trim()) newErrors.title = 'Title is required';
-      if (!formData.description.trim()) newErrors.description = 'Description is required';
+      if (!formData.title.trim()) {
+        newErrors.title = 'Title is required';
+      } else if (formData.title.trim().length < 5) {
+        newErrors.title = 'Title must be at least 5 characters';
+      } else if (formData.title.trim().length > 100) {
+        newErrors.title = 'Title must be less than 100 characters';
+      }
+      
+      if (!formData.description.trim()) {
+        newErrors.description = 'Description is required';
+      } else if (formData.description.trim().length < 20) {
+        newErrors.description = 'Description must be at least 20 characters';
+      } else if (formData.description.trim().length > 1000) {
+        newErrors.description = 'Description must be less than 1000 characters';
+      }
+      
       if (!formData.roomType) newErrors.roomType = 'Room type is required';
-      if (!formData.location.trim()) newErrors.location = 'Location is required';
+      if (!formData.city.trim()) newErrors.city = 'City is required';
+      
+      if (!formData.address.trim()) {
+        newErrors.address = 'Address is required';
+      } else if (formData.address.trim().length < 10) {
+        newErrors.address = 'Address must be at least 10 characters';
+      }
     }
 
     if (stepNumber === 2) {
-      if (formData.rent <= 0) newErrors.rent = 'Rent must be greater than 0';
+      if (formData.price < 1000) newErrors.price = 'Price must be at least 1000 BDT';
+      if (formData.price > 100000) newErrors.price = 'Price must be less than 100,000 BDT';
       if (!formData.availableFrom) newErrors.availableFrom = 'Available date is required';
+      
+      // Validate contact email format if provided
+      if (formData.contactEmail && formData.contactEmail.trim() !== '') {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.contactEmail)) {
+          newErrors.contactEmail = 'Please enter a valid email address';
+        }
+      }
     }
 
     if (stepNumber === 3) {
       if (formData.images.length === 0) newErrors.images = 'At least one image is required';
+    }
+
+    if (stepNumber === 4) {
+      // No validation needed for amenities and rules as they're optional
     }
 
     setErrors(newErrors);
@@ -160,30 +278,60 @@ export default function NewListingPage() {
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(4)) return;
+    // Validate all steps before submission
+    const allStepsValid = [1, 2, 3, 4].every(stepNum => validateStep(stepNum));
+    if (!allStepsValid) {
+      toast.error('Please fix all validation errors before submitting');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
+      
+      // Prepare data for API (match the expected schema)
+      const listingData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        price: formData.price,
+        city: formData.city.trim(),
+        address: formData.address.trim(),
+        roomType: formData.roomType,
+        amenities: formData.amenities,
+        rules: formData.rules,
+        images: formData.images,
+        availableFrom: formData.availableFrom || undefined,
+        contactPhone: formData.contactPhone?.trim() || undefined,
+        contactEmail: formData.contactEmail?.trim() || undefined,
+      };
+
+      console.log('Sending listing data:', listingData);
+
       const response = await fetch('/api/listings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(listingData),
       });
 
       if (response.ok) {
         const data = await response.json();
         const listing = data.data || data;
+        handleSuccess(data.message || 'Listing created successfully!');
         toast.success('Listing created successfully!');
-        // Redirect to listing page
-        window.location.href = `/rooms/${listing.id}`;
+        // Redirect to listing page after short delay
+        setTimeout(() => {
+          window.location.href = `/rooms/${listing.id}`;
+        }, 1500);
       } else {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to create listing');
+        const errorData = await response.json();
+        console.error('API Error:', errorData);
+        handleError(errorData);
+        toast.error(errorData.error?.message || 'Failed to create listing');
       }
     } catch (error) {
       console.error('Error creating listing:', error);
+      handleError(error);
       toast.error('An error occurred while creating the listing');
     } finally {
       setIsSubmitting(false);
@@ -224,6 +372,13 @@ export default function NewListingPage() {
           ))}
         </div>
 
+        {/* Error/Success Messages */}
+        <ErrorDisplay 
+          error={apiError} 
+          success={apiSuccess} 
+          className="mb-4" 
+        />
+
         {/* Step 1: Basic Information */}
         {step === 1 && (
           <Card>
@@ -238,29 +393,37 @@ export default function NewListingPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="title">Listing Title *</Label>
+                <Label htmlFor="title">Listing Title * (5-100 characters)</Label>
                 <Input
                   id="title"
+                  maxLength={100}
                   value={formData.title}
                   onChange={(e) => handleInputChange('title', e.target.value)}
                   placeholder="e.g., Cozy single room in Dhanmondi"
                   className={errors.title ? 'border-red-500' : ''}
                 />
+                <p className={`text-xs ${formData.title.length >= 5 && formData.title.length <= 100 ? 'text-green-600' : formData.title.length > 0 ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                  {formData.title.length}/100 characters {formData.title.length >= 5 && formData.title.length <= 100 ? '✓' : formData.title.length > 0 && formData.title.length < 5 ? '(need more)' : formData.title.length > 100 ? '(too long)' : ''}
+                </p>
                 {errors.title && (
                   <p className="text-sm text-red-500">{errors.title}</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Description *</Label>
+                <Label htmlFor="description">Description * (20-1000 characters)</Label>
                 <Textarea
                   id="description"
+                  maxLength={1000}
                   value={formData.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
                   placeholder="Describe your room, location benefits, nearby facilities..."
                   rows={4}
                   className={errors.description ? 'border-red-500' : ''}
                 />
+                <p className={`text-xs ${formData.description.length >= 20 && formData.description.length <= 1000 ? 'text-green-600' : formData.description.length > 0 ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                  {formData.description.length}/1000 characters {formData.description.length >= 20 && formData.description.length <= 1000 ? '✓' : formData.description.length > 0 && formData.description.length < 20 ? '(need more)' : formData.description.length > 1000 ? '(too long)' : ''}
+                </p>
                 {errors.description && (
                   <p className="text-sm text-red-500">{errors.description}</p>
                 )}
@@ -279,7 +442,6 @@ export default function NewListingPage() {
                     <SelectContent>
                       <SelectItem value="SINGLE">Single Room</SelectItem>
                       <SelectItem value="SHARED">Shared Room</SelectItem>
-                      <SelectItem value="ENTIRE_APARTMENT">Entire Apartment</SelectItem>
                     </SelectContent>
                   </Select>
                   {errors.roomType && (
@@ -288,12 +450,12 @@ export default function NewListingPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="location">Location *</Label>
+                  <Label htmlFor="city">City *</Label>
                   <Select
-                    value={formData.location}
-                    onValueChange={(value) => handleInputChange('location', value)}
+                    value={formData.city}
+                    onValueChange={(value) => handleInputChange('city', value)}
                   >
-                    <SelectTrigger className={errors.location ? 'border-red-500' : ''}>
+                    <SelectTrigger className={errors.city ? 'border-red-500' : ''}>
                       <SelectValue placeholder="Select area" />
                     </SelectTrigger>
                     <SelectContent>
@@ -302,10 +464,28 @@ export default function NewListingPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  {errors.location && (
-                    <p className="text-sm text-red-500">{errors.location}</p>
+                  {errors.city && (
+                    <p className="text-sm text-red-500">{errors.city}</p>
                   )}
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="address">Full Address * (Min: 10 characters)</Label>
+                <Textarea
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) => handleInputChange('address', e.target.value)}
+                  placeholder="e.g., House 123, Road 4, Block A, Dhanmondi, Dhaka-1205"
+                  rows={2}
+                  className={errors.address ? 'border-red-500' : formData.address.length > 0 && formData.address.length < 10 ? 'border-yellow-500' : ''}
+                />
+                <p className={`text-xs ${formData.address.length >= 10 ? 'text-green-600' : formData.address.length > 0 ? 'text-yellow-600' : 'text-muted-foreground'}`}>
+                  {formData.address.length}/10+ characters {formData.address.length >= 10 ? '✓' : formData.address.length > 0 ? '(need more)' : ''}
+                </p>
+                {errors.address && (
+                  <p className="text-sm text-red-500">{errors.address}</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -326,17 +506,24 @@ export default function NewListingPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="rent">Monthly Rent (৳) *</Label>
+                  <Label htmlFor="price">Monthly Rent (৳) *</Label>
                   <Input
-                    id="rent"
+                    id="price"
                     type="number"
-                    value={formData.rent || ''}
-                    onChange={(e) => handleInputChange('rent', parseFloat(e.target.value) || 0)}
-                    placeholder="15000"
-                    className={errors.rent ? 'border-red-500' : ''}
+                    min="1000"
+                    max="100000"
+                    value={formData.price || ''}
+                    onChange={(e) => handleInputChange('price', parseFloat(e.target.value) || 0)}
+                    placeholder="15000 (Min: 1000 BDT)"
+                    className={errors.price ? 'border-red-500' : formData.price > 0 && (formData.price < 1000 || formData.price > 100000) ? 'border-yellow-500' : formData.price >= 1000 && formData.price <= 100000 ? 'border-green-500' : ''}
                   />
-                  {errors.rent && (
-                    <p className="text-sm text-red-500">{errors.rent}</p>
+                  {formData.price > 0 && (
+                    <p className={`text-xs ${formData.price >= 1000 && formData.price <= 100000 ? 'text-green-600' : 'text-yellow-600'}`}>
+                      {formData.price >= 1000 && formData.price <= 100000 ? '✓ Valid price range' : 'Must be between 1,000 - 100,000 BDT'}
+                    </p>
+                  )}
+                  {errors.price && (
+                    <p className="text-sm text-red-500">{errors.price}</p>
                   )}
                 </div>
 
@@ -374,7 +561,11 @@ export default function NewListingPage() {
                     value={formData.contactEmail || ''}
                     onChange={(e) => handleInputChange('contactEmail', e.target.value)}
                     placeholder="landlord@example.com"
+                    className={errors.contactEmail ? 'border-red-500' : ''}
                   />
+                  {errors.contactEmail && (
+                    <p className="text-sm text-red-500">{errors.contactEmail}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -395,58 +586,157 @@ export default function NewListingPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Image Upload */}
-              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6">
+              <div 
+                className={`border-2 border-dashed rounded-lg p-6 transition-all duration-200 ${
+                  dragActive 
+                    ? 'border-blue-500 bg-blue-50/30 scale-102' 
+                    : 'border-muted-foreground/25 hover:border-blue-500 hover:bg-blue-50/20'
+                }`}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragActive(false);
+                  const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+                  if (files.length > 0) {
+                    const fileList = new DataTransfer();
+                    files.forEach(file => fileList.items.add(file));
+                    handleImageUpload(fileList.files);
+                  }
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setDragActive(false);
+                }}
+              >
                 <div className="text-center">
-                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Drag and drop images here, or click to select
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 transition-colors ${
+                    dragActive ? 'bg-blue-200' : 'bg-blue-100'
+                  }`}>
+                    <Upload className={`h-8 w-8 transition-colors ${
+                      dragActive ? 'text-blue-700' : 'text-blue-600'
+                    }`} />
+                  </div>
+                  <h3 className={`text-lg font-semibold mb-2 transition-colors ${
+                    dragActive ? 'text-blue-700' : ''
+                  }`}>
+                    {dragActive ? 'Drop your images here!' : 'Upload Room Images'}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {dragActive ? 'Release to upload your images' : 'Drag and drop your images here, or click to browse'}
                   </p>
+                  {!dragActive && (
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Supported formats: JPG, PNG, GIF • Maximum size: 5MB per image
+                    </p>
+                  )}
                   <input
                     type="file"
                     multiple
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
                     onChange={(e) => e.target.files && handleImageUpload(e.target.files)}
                     className="hidden"
-                    id="image-upload"
+                    ref={fileInputRef}
                   />
-                  <label htmlFor="image-upload">
-                    <Button type="button" variant="outline" size="sm" disabled={uploadingImages}>
-                      {uploadingImages ? (
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    className="bg-white hover:bg-blue-50 border-blue-200 text-blue-700"
+                    disabled={uploadingImages}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {uploadingImages ? (
+                      <>
                         <LoadingSpinner size="sm" className="mr-2" />
-                      ) : (
-                        <Plus className="h-4 w-4 mr-2" />
-                      )}
-                      Select Images
-                    </Button>
-                  </label>
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="h-4 w-4 mr-2" />
+                        Choose Images
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
 
+              {/* Upload Success Message */}
+              {uploadSuccess && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <Check className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium text-green-800">{uploadSuccess}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Progress */}
+              {uploadingImages && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <LoadingSpinner size="sm" />
+                    <span className="text-sm font-medium text-blue-700">Uploading images...</span>
+                  </div>
+                </div>
+              )}
+
               {errors.images && (
-                <p className="text-sm text-red-500">{errors.images}</p>
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600 font-medium">{errors.images}</p>
+                </div>
               )}
 
               {/* Image Preview */}
               {formData.images.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {formData.images.map((image, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={image}
-                        alt={`Room image ${index + 1}`}
-                        className="w-full h-32 object-cover rounded-lg"
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon-sm"
-                        className="absolute top-2 right-2"
-                        onClick={() => removeImage(index)}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">{formData.images.length} image(s) selected</span>
                     </div>
-                  ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleInputChange('images', [])}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Clear All
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {formData.images.map((image, index) => (
+                      <div key={index} className="relative group">
+                        <Image
+                          src={image}
+                          alt={`Room image ${index + 1}`}
+                          width={200}
+                          height={128}
+                          className="w-full h-32 object-cover rounded-lg border-2 border-transparent group-hover:border-blue-200 transition-colors"
+                          unoptimized={true}
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
+                          onClick={() => removeImage(index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                        <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                          {index + 1}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </CardContent>

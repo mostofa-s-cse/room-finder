@@ -148,4 +148,11 @@ export class MapProviderService {
     
     return null;
   }
+
+  cleanup(container: HTMLElement): void {
+    if (this.currentProvider === 'openstreetmap' && this.openStreetMapService) {
+      this.openStreetMapService.cleanupMap(container);
+    }
+    // Google Maps cleanup is handled automatically
+  }
 }

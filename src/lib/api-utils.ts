@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { UserRole } from '@prisma/client';
-import { ZodSchema } from 'zod';
+import { ZodSchema, ZodError } from 'zod';
+import { Prisma } from '@prisma/client';
 
 export interface ApiError {
   message: string;
@@ -38,10 +39,96 @@ export function errorResponse(error: ApiErrorClass | Error, statusCode?: number)
     );
   }
 
+  // Handle Zod validation errors
+  if (error instanceof ZodError) {
+    return NextResponse.json(
+      {
+        error: {
+          message: 'Validation failed',
+          code: 'VALIDATION_ERROR',
+          details: error.issues.map((issue: any) => ({
+            field: issue.path.join('.'),
+            message: issue.message,
+            code: issue.code
+          }))
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  // Handle Prisma errors
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    let message = 'Database error occurred';
+    let statusCode = 500;
+    
+    switch (error.code) {
+      case 'P2002': // Unique constraint violation
+        const target = error.meta?.target as string[] | undefined;
+        message = `A record with this ${target?.[0] || 'field'} already exists`;
+        statusCode = 409;
+        break;
+      case 'P2025': // Record not found
+        message = 'The requested resource was not found';
+        statusCode = 404;
+        break;
+      case 'P2003': // Foreign key constraint violation
+        message = 'Invalid reference to related resource';
+        statusCode = 400;
+        break;
+      case 'P2014': // Required relation missing
+        message = 'Missing required relationship data';
+        statusCode = 400;
+        break;
+      default:
+        message = 'Database operation failed';
+        break;
+    }
+    
+    return NextResponse.json(
+      {
+        error: {
+          message,
+          code: 'DATABASE_ERROR',
+          details: { prismaCode: error.code }
+        },
+      },
+      { status: statusCode }
+    );
+  }
+
+  // Handle Prisma validation errors
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    return NextResponse.json(
+      {
+        error: {
+          message: 'Invalid data provided to database',
+          code: 'VALIDATION_ERROR',
+          details: 'Please check the data format and try again'
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  // Handle JSON parse errors
+  if (error instanceof SyntaxError && error.message.includes('JSON')) {
+    return NextResponse.json(
+      {
+        error: {
+          message: 'Invalid JSON format',
+          code: 'INVALID_JSON',
+        },
+      },
+      { status: 400 }
+    );
+  }
+
+  // Generic error fallback
   return NextResponse.json(
     {
       error: {
-        message: error.message || 'Internal server error',
+        message: 'An unexpected error occurred. Please try again later.',
         code: 'INTERNAL_ERROR',
       },
     },
@@ -82,11 +169,22 @@ export async function requireAuth(request: NextRequest, allowedRoles?: UserRole[
   const session = await getServerSession(authOptions);
 
   if (!session || !session.user) {
-    throw new ApiErrorClass('Authentication required', 'UNAUTHORIZED', 401);
+    throw new ApiErrorClass('Please sign in to access this resource', 'UNAUTHORIZED', 401);
   }
 
   if (allowedRoles && !allowedRoles.includes(session.user.role as UserRole)) {
-    throw new ApiErrorClass('Insufficient permissions', 'FORBIDDEN', 403);
+    const roleNames = {
+      [UserRole.ADMIN]: 'administrator',
+      [UserRole.LANDLORD]: 'landlord',
+      [UserRole.BACHELOR]: 'bachelor'
+    };
+    
+    const requiredRoles = allowedRoles.map(role => roleNames[role]).join(' or ');
+    throw new ApiErrorClass(
+      `This action requires ${requiredRoles} privileges. Your current role: ${roleNames[session.user.role as UserRole]}`,
+      'FORBIDDEN',
+      403
+    );
   }
 
   return session;
@@ -164,17 +262,16 @@ export function withErrorHandling(
     try {
       return await handler(request, context);
     } catch (error) {
-      console.error('API Error:', error);
+      // Log error with more context
+      console.error('API Error:', {
+        method: request.method,
+        url: request.url,
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined
+      });
       
-      if (error instanceof ApiErrorClass) {
-        return errorResponse(error);
-      }
-      
-      return errorResponse(new ApiErrorClass(
-        'Internal server error',
-        'INTERNAL_ERROR',
-        500
-      ));
+      // Return appropriate error response
+      return errorResponse(error as Error);
     }
   };
 }

@@ -14,3 +14,4 @@ export { RatingStars } from './RatingStars';
 export { ListingCard } from './ListingCard';
 export { FiltersSidebar } from './FiltersSidebar';
 export { MapComponent } from './MapComponent';
+export { ErrorDisplay, useApiError } from './ErrorDisplay';

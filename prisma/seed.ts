@@ -18,6 +18,19 @@ const SAMPLE_AMENITIES = [
   'Elevator'
 ];
 
+const SAMPLE_RULES = [
+  'No smoking',
+  'No pets',
+  'No parties',
+  'No overnight guests',
+  'Quiet hours after 10 PM',
+  'Clean common areas',
+  'No alcohol',
+  'Separate electricity bill',
+  'Advance rent required',
+  'Security deposit required'
+];
+
 const DHAKA_AREAS = [
   { name: 'Dhanmondi', lat: 23.746466, lng: 90.376015 },
   { name: 'Gulshan', lat: 23.781311, lng: 90.417458 },
@@ -37,35 +50,50 @@ const SAMPLE_LISTINGS = [
     description: 'A beautiful single room with all modern amenities. Perfect for working professionals.',
     price: 12000,
     roomType: RoomType.SINGLE,
-    amenities: ['WiFi', 'AC', 'Kitchen', 'Security']
+    amenities: ['WiFi', 'AC', 'Kitchen', 'Security'],
+    rules: ['No smoking', 'No pets', 'Quiet hours after 10 PM', 'Clean common areas'],
+    contactPhone: '+8801700000001',
+    contactEmail: 'karim.dhanmondi@example.com'
   },
   {
     title: 'Shared Room Near University',
     description: 'Affordable shared accommodation near Dhaka University. Great for students.',
     price: 8000,
     roomType: RoomType.SHARED,
-    amenities: ['WiFi', 'Kitchen', 'Water Supply']
+    amenities: ['WiFi', 'Kitchen', 'Water Supply'],
+    rules: ['No smoking', 'No alcohol', 'Quiet hours after 10 PM', 'Security deposit required'],
+    contactPhone: '+8801700000002',
+    contactEmail: 'fatema.university@example.com'
   },
   {
     title: 'Luxury Bachelor Pad in Gulshan',
     description: 'Premium single room with all facilities in the heart of Gulshan.',
     price: 25000,
     roomType: RoomType.SINGLE,
-    amenities: ['WiFi', 'AC', 'Parking', 'Kitchen', 'Bathroom', 'Balcony', 'Furnished', 'Security', 'Generator', 'Elevator']
+    amenities: ['WiFi', 'AC', 'Parking', 'Kitchen', 'Bathroom', 'Balcony', 'Furnished', 'Security', 'Generator', 'Elevator'],
+    rules: ['No smoking', 'No parties', 'No overnight guests', 'Advance rent required'],
+    contactPhone: '+8801700000003',
+    contactEmail: 'rahim.gulshan@example.com'
   },
   {
     title: 'Budget Friendly Room in Mirpur',
     description: 'Affordable single room perfect for young professionals starting their career.',
     price: 9000,
     roomType: RoomType.SINGLE,
-    amenities: ['WiFi', 'Kitchen', 'Water Supply', 'Security']
+    amenities: ['WiFi', 'Kitchen', 'Water Supply', 'Security'],
+    rules: ['No smoking', 'Clean common areas', 'Separate electricity bill'],
+    contactPhone: '+8801700000004',
+    contactEmail: 'landlord.mirpur@example.com'
   },
   {
     title: 'Modern Shared Space in Uttara',
     description: 'Well-designed shared living space with modern amenities.',
     price: 10000,
     roomType: RoomType.SHARED,
-    amenities: ['WiFi', 'AC', 'Kitchen', 'Bathroom', 'Security', 'Generator']
+    amenities: ['WiFi', 'AC', 'Kitchen', 'Bathroom', 'Security', 'Generator'],
+    rules: ['No smoking', 'No pets', 'Quiet hours after 10 PM', 'Clean common areas'],
+    contactPhone: '+8801700000005',
+    contactEmail: 'owner.uttara@example.com'
   }
 ];
 
@@ -182,6 +210,10 @@ async function main() {
     const lat = area.lat + (Math.random() - 0.5) * 0.01;
     const lng = area.lng + (Math.random() - 0.5) * 0.01;
     
+    // Generate availableFrom date (1-30 days from now)
+    const availableFrom = new Date();
+    availableFrom.setDate(availableFrom.getDate() + Math.floor(Math.random() * 30) + 1);
+    
     const listing = await prisma.listing.create({
       data: {
         ...sample,
@@ -191,6 +223,10 @@ async function main() {
         lat,
         lng,
         amenities: sample.amenities,
+        rules: sample.rules || [],
+        availableFrom,
+        contactPhone: sample.contactPhone,
+        contactEmail: sample.contactEmail,
         images: ['/images/default-room.svg']
       }
     });
@@ -212,8 +248,16 @@ async function main() {
       .sort(() => 0.5 - Math.random())
       .slice(0, Math.floor(Math.random() * 6) + 3);
     
+    const randomRules = SAMPLE_RULES
+      .sort(() => 0.5 - Math.random())
+      .slice(0, Math.floor(Math.random() * 4) + 2);
+    
     const priceVariation = 0.8 + (Math.random() * 0.4); // 80% to 120% of base price
     const adjustedPrice = Math.round(sampleListing.price * priceVariation / 1000) * 1000;
+    
+    // Generate availableFrom date (1-45 days from now)
+    const availableFrom = new Date();
+    availableFrom.setDate(availableFrom.getDate() + Math.floor(Math.random() * 45) + 1);
     
     const listing = await prisma.listing.create({
       data: {
@@ -226,6 +270,10 @@ async function main() {
         lng,
         roomType: sampleListing.roomType,
         amenities: randomAmenities,
+        rules: randomRules,
+        availableFrom,
+        contactPhone: `+88017${String(Math.floor(Math.random() * 90000000) + 10000000)}`,
+        contactEmail: `${landlord.name.toLowerCase().replace(' ', '.')}.${area.name.toLowerCase()}@example.com`,
         landlordId: landlord.id,
         images: ['/images/default-room.svg']
       }
