@@ -11,17 +11,23 @@ interface Listing {
   title: string;
   description: string;
   rent: number;
+  price?: number; // API field
+  monthlyRent?: number; // API field
   location: string;
+  address?: string; // API field
+  city?: string; // API field
   images: string[];
   amenities: string[];
   roomType: 'SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT';
   isAvailable: boolean;
   availableFrom: string;
   avgRating?: number;
+  ratingAvg?: number; // API field
   landlord: {
     id: string;
     name: string;
     profilePicture?: string;
+    phone?: string; // API field
   };
   createdAt: string;
 }
@@ -33,7 +39,7 @@ export function FeaturedListingsClient() {
   useEffect(() => {
     async function fetchListings() {
       try {
-        const res = await fetch('/api/listings?limit=6&featured=true');
+        const res = await fetch('/api/listings?limit=6&sortBy=newest');
         if (res.ok) {
           const data = await res.json();
           // Ensure we always set an array, even if the API response structure is unexpected
@@ -41,12 +47,16 @@ export function FeaturedListingsClient() {
                                Array.isArray(data) ? data : 
                                Array.isArray(data.listings) ? data.listings : [];
           
-          // Process listings to handle rent display
-          const processedListings = listingsData.map((listing: Listing) => ({
+          // Process listings to handle rent display and map API fields
+          const processedListings = listingsData.map((listing: Listing & { price?: number; monthlyRent?: number; address?: string; city?: string; ratingAvg?: number }) => ({
             ...listing,
-            images: listing.images || [], // Ensure images is always an array
-            rent: listing.rent || 0 // Ensure rent is a number
+            images: listing.images && listing.images.length > 0 ? listing.images : ['/images/default-room.svg'], // Ensure images is always an array
+            rent: listing.price || listing.rent || listing.monthlyRent || 0, // Map price field to rent
+            location: listing.address || listing.location || listing.city || 'Location not specified',
+            avgRating: listing.ratingAvg || listing.avgRating || 0 // Map rating fields
           }));
+          
+
           
           setListings(processedListings);
         } else {

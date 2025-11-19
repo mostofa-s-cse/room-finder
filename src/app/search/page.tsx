@@ -32,6 +32,8 @@ interface Listing {
   price: number;
   rent: number;
   location: string;
+  address?: string;
+  city?: string;
   lat: number;
   lng: number;
   roomType: 'SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT';
@@ -113,7 +115,17 @@ function SearchContent() {
       const data = await response.json();
       // Handle API response structure: { data: [...], pagination: {...} }
       const listingsData = data.data || data.listings || [];
-      setListings(Array.isArray(listingsData) ? listingsData : []);
+      
+      // Process listings to handle field mapping and ensure proper data structure
+      const processedListings = Array.isArray(listingsData) ? listingsData.map((listing: any) => ({
+        ...listing,
+        rent: listing.price || listing.rent || listing.monthlyRent || 0, // Map price field to rent
+        location: listing.address || listing.location || listing.city || 'Location not specified',
+        images: listing.images && listing.images.length > 0 ? listing.images : ['/images/default-room.svg'],
+        avgRating: listing.ratingAvg || listing.avgRating || 0
+      })) : [];
+      
+      setListings(processedListings);
       setTotalPages(data.pagination?.totalPages || 1);
       setTotalResults(data.pagination?.total || 0);
       

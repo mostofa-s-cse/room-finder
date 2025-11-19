@@ -110,7 +110,7 @@ export function ListingCard({
 
               <div className="flex items-center justify-between">
                 <div className="text-lg font-bold text-primary">
-                  {formatPrice(listing.price)}/mo
+                  {listing.price && listing.price > 0 ? `${formatPrice(listing.price)}/mo` : '৳Contact for price'}
                 </div>
                 
                 {listing.ratingAvg > 0 && (
@@ -203,9 +203,11 @@ export function ListingCard({
         <div className="absolute bottom-2 right-2">
           <div className="bg-background/90 backdrop-blur-sm rounded-md px-2 py-1">
             <div className="text-lg font-bold text-primary">
-              {formatPrice(listing.price)}
+              {listing.price && listing.price > 0 ? formatPrice(listing.price) : '৳Contact for price'}
             </div>
-            <div className="text-xs text-muted-foreground">per month</div>
+            <div className="text-xs text-muted-foreground">
+              {listing.price && listing.price > 0 ? 'per month' : ''}
+            </div>
           </div>
         </div>
       </div>

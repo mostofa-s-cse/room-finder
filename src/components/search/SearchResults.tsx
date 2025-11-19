@@ -228,9 +228,11 @@ function SearchResultCard({ listing }: SearchResultCardProps) {
           <div className="flex flex-col items-end justify-between">
             <div className="text-right">
               <div className="text-2xl font-bold text-gray-900">
-                ৳{listing.monthlyRent.toLocaleString()}
+                {listing.monthlyRent && listing.monthlyRent > 0 ? `৳${listing.monthlyRent.toLocaleString()}` : '৳Contact for price'}
               </div>
-              <div className="text-sm text-gray-500">per month</div>
+              <div className="text-sm text-gray-500">
+                {listing.monthlyRent && listing.monthlyRent > 0 ? 'per month' : ''}
+              </div>
               {listing.priceScore !== undefined && listing.priceScore > 80 && (
                 <div className="text-xs text-green-600 font-medium mt-1">
                   Great Value

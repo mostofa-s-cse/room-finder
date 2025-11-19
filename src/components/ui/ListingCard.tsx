@@ -7,6 +7,7 @@ import { MapPin, Heart, Share2, Star } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
+import { formatPrice } from '@/utils/helpers';
 
 interface Listing {
   id: string;
@@ -174,7 +175,7 @@ export function ListingCard({ listing, className = "" }: ListingCardProps) {
           </div>
           <div className="text-right ml-2">
             <div className="text-2xl font-bold">
-              {listing.rent && listing.rent > 0 ? `৳${listing.rent.toLocaleString()}` : '৳Contact for price'}
+              {listing.rent && listing.rent > 0 ? formatPrice(listing.rent) : '৳Contact for price'}
             </div>
             <div className="text-sm text-muted-foreground">per month</div>
           </div>
