@@ -62,10 +62,10 @@ interface Listing {
     rating: number;
     comment: string;
     createdAt: string;
-    author: {
+    reviewer?: {
       id: string;
       name: string;
-    };
+    } | null;
   }>;
   createdAt: string;
   updatedAt: string;
@@ -397,11 +397,11 @@ export default function RoomDetailsPage() {
                           <div className="flex items-center">
                             <Avatar className="h-8 w-8 mr-3">
                               <AvatarFallback>
-                                {review.author.name?.charAt(0)?.toUpperCase() || 'U'}
+                                {review.reviewer?.name?.charAt(0)?.toUpperCase() || 'U'}
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <p className="font-medium text-sm">{review.author.name}</p>
+                              <p className="font-medium text-sm">{review.reviewer?.name || 'Anonymous'}</p>
                               <p className="text-xs text-gray-600">
                                 {new Date(review.createdAt).toLocaleDateString()}
                               </p>

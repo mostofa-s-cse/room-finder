@@ -44,6 +44,11 @@ export class OpenStreetMapService {
     await this.loadLeaflet();
     const L = await import('leaflet');
 
+    // Validate container
+    if (!container || !container.parentNode) {
+      throw new Error('Invalid container element for map creation');
+    }
+
     // Use the cleanup method to properly remove any existing map
     this.cleanupMap(container);
 
@@ -89,18 +94,29 @@ export class OpenStreetMapService {
     await this.loadLeaflet();
     const L = await import('leaflet');
 
+    // Validate map instance
+    if (!map || !map.getContainer || !map.getContainer()) {
+      console.warn('Invalid map instance for adding markers');
+      return [];
+    }
+
     const leafletMarkers: Marker[] = [];
 
     for (const marker of markers) {
-      const leafletMarker = L.marker([marker.position.lat, marker.position.lng])
-        .addTo(map);
+      try {
+        const leafletMarker = L.marker([marker.position.lat, marker.position.lng])
+          .addTo(map);
 
-      if (marker.title || marker.description) {
-        const popupContent = this.createPopupContent(marker);
-        leafletMarker.bindPopup(popupContent);
+        if (marker.title || marker.description) {
+          const popupContent = this.createPopupContent(marker);
+          leafletMarker.bindPopup(popupContent);
+        }
+
+        leafletMarkers.push(leafletMarker);
+      } catch (error) {
+        console.warn('Failed to add marker:', error, marker);
+        // Continue with next marker instead of failing completely
       }
-
-      leafletMarkers.push(leafletMarker);
     }
 
     return leafletMarkers;
@@ -109,6 +125,12 @@ export class OpenStreetMapService {
   async addHeatmap(map: Map, points: HeatmapPoint[]): Promise<Circle[]> {
     await this.loadLeaflet();
     const L = await import('leaflet');
+
+    // Validate map instance
+    if (!map || !map.getContainer || !map.getContainer()) {
+      console.warn('Invalid map instance for adding heatmap');
+      return [];
+    }
 
     const circles: Circle[] = [];
 
@@ -203,12 +225,20 @@ export class OpenStreetMapService {
   }
 
   private createPopupContent(marker: MapMarker): string {
-    return `
-      <div class="p-2 max-w-xs">
-        <h3 class="font-semibold text-sm mb-1">${marker.title || 'Location'}</h3>
-        ${marker.description ? `<p class="text-xs text-gray-600">${marker.description}</p>` : ''}
-      </div>
-    `;
+    try {
+      const title = marker.title ? marker.title.replace(/[<>]/g, '') : 'Location';
+      const description = marker.description ? marker.description.replace(/[<>]/g, '') : '';
+      
+      return `
+        <div class="p-2 max-w-xs">
+          <h3 class="font-semibold text-sm mb-1">${title}</h3>
+          ${description ? `<p class="text-xs text-gray-600">${description}</p>` : ''}
+        </div>
+      `;
+    } catch (error) {
+      console.warn('Error creating popup content:', error);
+      return '<div class="p-2">Location</div>';
+    }
   }
 
   async destroyMap(map: Map): Promise<void> {

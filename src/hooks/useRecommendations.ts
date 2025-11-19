@@ -90,6 +90,10 @@ export function useRecommendations() {
       const data = await response.json();
 
       if (!response.ok) {
+        // Handle specific error codes
+        if (data.code === 'PROFILE_INCOMPLETE') {
+          throw new Error(data.error || 'Profile incomplete for recommendations');
+        }
         throw new Error(data.error || 'Failed to generate recommendations');
       }
 

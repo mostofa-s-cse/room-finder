@@ -5,6 +5,7 @@ import { Navbar } from '@/components/ui/Navbar';
 import { Footer } from '@/components/ui/Footer';
 import { Toaster } from '@/components/ui/toaster';
 import "./globals.css";
+import "leaflet/dist/leaflet.css";
 
 const inter = Inter({
   subsets: ["latin"],

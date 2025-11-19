@@ -38,6 +38,19 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       );
     }
 
+    // Check if user has budget information
+    if (!userData.income && !userData.affordablePrice) {
+      return NextResponse.json({
+        error: 'Profile incomplete. Please set your income or affordable price range in your profile to get personalized recommendations.',
+        code: 'PROFILE_INCOMPLETE',
+        suggestions: [
+          'Add your monthly income to your profile',
+          'Set your affordable price range',
+          'Complete your profile for better recommendations'
+        ]
+      }, { status: 400 });
+    }
+
     // Build user preferences
     const userPreferences: UserPreferences = {
       userId: user.id,

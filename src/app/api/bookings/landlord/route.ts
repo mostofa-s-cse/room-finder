@@ -25,7 +25,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         landlordId: user.id
       }
     },
-    include: {
+    select: {
+      id: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      amount: true,
+      totalAmount: true,
+      currency: true,
+      createdAt: true,
       listing: {
         select: {
           id: true,

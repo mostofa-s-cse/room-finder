@@ -394,6 +394,11 @@ async function main() {
     const endDate = new Date(startDate);
     endDate.setMonth(endDate.getMonth() + 6); // 6 months duration
 
+    // Calculate months between start and end date
+    const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                       (endDate.getMonth() - startDate.getMonth());
+    const totalAmount = listing.price * monthsDiff;
+
     await prisma.booking.create({
       data: {
         listingId: listing.id,
@@ -401,6 +406,7 @@ async function main() {
         startDate,
         endDate,
         amount: listing.price * 0.1, // 10% deposit
+        totalAmount: totalAmount, // Total amount for the entire booking period
         currency: 'BDT',
         status: i === 0 ? 'PAID' : 'PENDING'
       }

@@ -171,10 +171,11 @@ interface Review {
 
 interface Booking {
   id: string;
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
+  status: 'PENDING' | 'CONFIRMED' | 'PAID' | 'CANCELLED' | 'COMPLETED';
   startDate: string;
   endDate: string;
-  totalAmount: number;
+  amount: number;
+  totalAmount?: number;
   user: {
     name: string;
     phone?: string;
@@ -183,7 +184,9 @@ interface Booking {
   listing: {
     id: string;
     title: string;
-    location: string;
+    location?: string;
+    address?: string;
+    price?: number;
   };
   createdAt: string;
 }
@@ -710,7 +713,7 @@ export default function LandlordDashboard() {
                           {booking.listing.title}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          ৳{booking.totalAmount ? booking.totalAmount.toLocaleString() : 'N/A'}
+                          ৳{(booking.totalAmount || booking.amount || 0).toLocaleString()}
                         </p>
                       </div>
                     </div>
@@ -849,7 +852,7 @@ export default function LandlordDashboard() {
                           {booking.listing.title}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {booking.listing.location}
+                          {booking.listing.location || booking.listing.address || 'Location not specified'}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <Mail className="h-3 w-3" />
@@ -862,7 +865,10 @@ export default function LandlordDashboard() {
                         {booking.status}
                       </Badge>
                       <p className="text-lg font-semibold mt-2">
-                        ৳{booking.totalAmount ? booking.totalAmount.toLocaleString() : 'N/A'}
+                        ৳{(booking.totalAmount || booking.amount || 0).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {booking.totalAmount ? 'Total Amount' : 'Deposit Amount'}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}

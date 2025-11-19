@@ -48,7 +48,10 @@ export function MapComponent({
   const mapProviderService = MapProviderService.getInstance();
 
   const initializeMap = useCallback(async () => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !mapRef.current.parentNode) {
+      console.warn('Map container not ready or not attached to DOM');
+      return;
+    }
 
     try {
       setIsLoading(true);
@@ -62,6 +65,15 @@ export function MapComponent({
           console.warn('Error during map cleanup:', error);
         }
         mapInstanceRef.current = null;
+      }
+
+      // Ensure container has dimensions
+      const containerRect = mapRef.current.getBoundingClientRect();
+      if (containerRect.width === 0 || containerRect.height === 0) {
+        console.warn('Map container has no dimensions');
+        setError('Map container is not visible');
+        setIsLoading(false);
+        return;
       }
 
       const config: MapConfig = {
@@ -191,7 +203,12 @@ export function MapComponent({
   }, [mapProvider, initializeMap]);
 
   useEffect(() => {
-    initializeMap();
+    // Add a small delay to ensure DOM is fully ready
+    const timer = setTimeout(() => {
+      initializeMap();
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, [initializeMap]);
 
   useEffect(() => {

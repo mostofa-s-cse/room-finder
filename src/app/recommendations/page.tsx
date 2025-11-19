@@ -62,12 +62,31 @@ export default function RecommendationsPage() {
   const [budgetFlexibility, setBudgetFlexibility] = useState([10]);
   const [priorityWeights, setPriorityWeights] = useState(DEFAULT_PRIORITY_WEIGHTS);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
-    loadPreferences();
-    // Get quick recommendations on page load
-    getQuickRecommendations({ limit: 6 });
-  }, [loadPreferences, getQuickRecommendations]);
+    const loadUserData = async () => {
+      try {
+        setProfileLoading(true);
+        const response = await fetch('/api/users/profile');
+        if (response.ok) {
+          const data = await response.json();
+          setUserProfile(data.data || data);
+        }
+      } catch (error) {
+        console.error('Failed to load user profile:', error);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    if (session) {
+      loadUserData();
+      loadPreferences();
+      getQuickRecommendations({ limit: 6 });
+    }
+  }, [session, loadPreferences, getQuickRecommendations]);
 
   // Note: Preferences will be loaded manually when user changes them
 
@@ -393,10 +412,26 @@ export default function RecommendationsPage() {
                       )}
                     </div>
 
+                    {/* Profile Completeness Check */}
+                    {!profileLoading && userProfile && (!userProfile.income && !userProfile.affordablePrice) && (
+                      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2">
+                        <div className="flex items-center space-x-2 text-yellow-800">
+                          <AlertCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium">Profile Incomplete</span>
+                        </div>
+                        <p className="text-xs text-yellow-700">
+                          Please set your income or affordable price range in your profile to get better recommendations.
+                        </p>
+                        <Button asChild size="sm" variant="outline" className="w-full">
+                          <Link href="/profile/edit">Complete Profile</Link>
+                        </Button>
+                      </div>
+                    )}
+
                     {/* Generate Button */}
                     <Button 
                       onClick={handleGenerateRecommendations}
-                      disabled={loading}
+                      disabled={loading || profileLoading}
                       className="w-full"
                     >
                       {loading ? (
@@ -553,12 +588,31 @@ export default function RecommendationsPage() {
                       <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                       <h3 className="text-lg font-medium mb-2">No matches found</h3>
                       <p className="text-muted-foreground mb-4">
+                        Found {meta.totalListings} total listings, but none matched your criteria.
                         Try adjusting your preferences or increasing budget flexibility.
                       </p>
+                      {userProfile && (
+                        <div className="text-xs text-muted-foreground mb-4 space-y-1">
+                          <div>Budget: {userProfile.affordablePrice ? `৳${userProfile.affordablePrice.toLocaleString()}` : 'Not set'}</div>
+                          <div>Income: {userProfile.income ? `৳${userProfile.income.toLocaleString()}` : 'Not set'}</div>
+                          <div>Selected amenities: {selectedAmenities.length > 0 ? selectedAmenities.join(', ') : 'None'}</div>
+                          <div>Room types: {roomTypes.length > 0 ? roomTypes.join(', ') : 'Any'}</div>
+                        </div>
+                      )}
                       <Button onClick={handleGenerateRecommendations}>
                         <RefreshCw className="w-4 h-4 mr-2" />
                         Try Again
                       </Button>
+                    </CardContent>
+                  </Card>
+                ) : !loading && recommendations.length === 0 && !meta ? (
+                  <Card>
+                    <CardContent className="text-center py-12">
+                      <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                      <h3 className="text-lg font-medium mb-2">Get Started</h3>
+                      <p className="text-muted-foreground mb-4">
+                        Click \"Get Recommendations\" to find rooms that match your preferences.
+                      </p>
                     </CardContent>
                   </Card>
                 ) : null}
