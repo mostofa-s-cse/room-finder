@@ -390,6 +390,10 @@ export default function AdminDashboard() {
     router.push('/dashboard/admin/analytics');
   };
 
+  const handleViewSecurityLogs = () => {
+    router.push('/dashboard/admin/security-logs');
+  };
+
   const handleSaveUserChanges = async () => {
     if (!selectedUser) return;
 
@@ -619,7 +623,7 @@ export default function AdminDashboard() {
           </p>
         </div>
         <div className="flex gap-2 mt-4 md:mt-0">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleViewSecurityLogs}>
             <Shield className="h-4 w-4 mr-2" />
             Security Logs
           </Button>
