@@ -375,7 +375,7 @@ const AuthButtons = ({
                   )}
                 </div>
                 <div className="mt-4 pt-3 border-t">
-                  <Link href={session.user.role === 'BACHELOR' ? '/dashboard/bachelor?tab=chats' : '/messages'} className="w-full" onClick={() => setIsMessageOpen(false)}>
+                  <Link href={session.user.role === 'BACHELOR' ? '/dashboard/bachelor?tab=chats' : '/chat'} className="w-full" onClick={() => setIsMessageOpen(false)}>
                     <Button variant="outline" size="sm" className="w-full">
                       View All Messages
                     </Button>

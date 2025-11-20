@@ -110,12 +110,21 @@ interface FinancialData {
   monthlyRevenue: number;
   yearlyRevenue: number;
   totalEarnings: number;
+  totalRevenue: number;
   pendingPayments: number;
   expenses: number;
   netIncome: number;
   occupancyRate: number;
   averageRent: number;
   revenueGrowth: number;
+  recentTransactions?: {
+    id: string;
+    amount: number;
+    status: string;
+    date: string;
+    tenant: string;
+    listing: string;
+  }[];
 }
 
 interface Review {
@@ -190,7 +199,6 @@ export default function LandlordDashboard() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
   const [financialData, setFinancialData] = useState<FinancialData | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [reviews, setReviews] = useState<Review[]>([]);
   
   // UI state
@@ -287,6 +295,14 @@ export default function LandlordDashboard() {
     if (!session || session.user.role !== 'LANDLORD') {
       redirect('/auth/signin');
     }
+    
+    // Read tab from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam && ['overview', 'listings', 'tenants', 'bookings', 'maintenance', 'financial', 'reviews', 'analytics'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+    
     fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, status]);
@@ -352,7 +368,6 @@ export default function LandlordDashboard() {
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const updateMaintenanceRequest = async (id: string, status: MaintenanceRequest['status']) => {
     try {
       const response = await fetch(`/api/landlord/maintenance/${id}`, {
@@ -372,7 +387,6 @@ export default function LandlordDashboard() {
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const respondToReview = async (reviewId: string, response: string) => {
     try {
       const res = await fetch(`/api/landlord/reviews/${reviewId}/respond`, {
@@ -549,7 +563,13 @@ export default function LandlordDashboard() {
         </div>
 
         {/* Comprehensive Management Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs value={activeTab} onValueChange={(value) => {
+          setActiveTab(value);
+          // Update URL without page reload
+          const url = new URL(window.location.href);
+          url.searchParams.set('tab', value);
+          window.history.pushState({}, '', url.toString());
+        }} className="space-y-6">
           <Card className="border-0 shadow-lg bg-white">
             <CardContent className="p-6">
               <TabsList className="grid w-full grid-cols-7 bg-slate-100 p-1 rounded-lg">
@@ -864,6 +884,361 @@ export default function LandlordDashboard() {
                 <p className="text-muted-foreground">No bookings yet.</p>
                 <p className="text-sm text-muted-foreground mt-2">
                   Your listings will start receiving bookings once they&apos;re live.
+                </p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Tenants Tab */}
+        <TabsContent value="tenants" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Tenant Management</h2>
+              <p className="text-muted-foreground">Manage your tenants and rental agreements</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {Array.isArray(tenants) && tenants.map((tenant) => (
+              <Card key={tenant.id}>
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-4">
+                    <Avatar className="h-16 w-16">
+                      <AvatarImage src={tenant.profilePicture} />
+                      <AvatarFallback>{tenant.name?.charAt(0) || 'T'}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold">{tenant.name}</h3>
+                          <p className="text-sm text-muted-foreground">{tenant.email}</p>
+                          {tenant.phone && (
+                            <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                              <Phone className="h-3 w-3" />
+                              {tenant.phone}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <Badge className={tenant.rentStatus === 'PAID' ? 'bg-green-100 text-green-800' : tenant.rentStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}>
+                            {tenant.rentStatus}
+                          </Badge>
+                          {tenant.currentListing && (
+                            <p className="text-sm font-medium mt-2">{tenant.currentListing.title}</p>
+                          )}
+                          <p className="text-lg font-bold mt-1">৳{tenant.totalPaid?.toLocaleString() || '0'}</p>
+                          <p className="text-xs text-muted-foreground">Total Paid</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-4">
+                        <Button size="sm" variant="outline">
+                          <Phone className="h-4 w-4 mr-1" />
+                          Call
+                        </Button>
+                        <Button size="sm" variant="outline">
+                          <MessageCircle className="h-4 w-4 mr-1" />
+                          Message
+                        </Button>
+                        <Button size="sm" variant="outline">
+                          View Details
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {tenants.length === 0 && (
+              <div className="text-center py-12">
+                <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No tenants yet.</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Tenants will appear here once they book your listings.
+                </p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Maintenance Tab */}
+        <TabsContent value="maintenance" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Maintenance Requests</h2>
+              <p className="text-muted-foreground">Manage property maintenance and repairs</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {Array.isArray(maintenanceRequests) && maintenanceRequests.map((request) => (
+              <Card key={request.id}>
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-lg font-semibold">{request.title}</h3>
+                        <Badge className={
+                          request.priority === 'URGENT' ? 'bg-red-100 text-red-800' :
+                          request.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' :
+                          request.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }>
+                          {request.priority}
+                        </Badge>
+                        <Badge className={
+                          request.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                          request.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                          request.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }>
+                          {request.status}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{request.description}</p>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span>Property: {request.listingTitle || 'Unknown'}</span>
+                        <span>Tenant: {request.tenantName || 'Unknown'}</span>
+                        <span>Created: {new Date(request.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      {(request.estimatedCost || request.actualCost) && (
+                        <div className="mt-2 text-sm">
+                          {request.estimatedCost && <span>Estimated: ৳{request.estimatedCost.toLocaleString()}</span>}
+                          {request.actualCost && <span className="ml-4">Actual: ৳{request.actualCost.toLocaleString()}</span>}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {request.status === 'PENDING' && (
+                        <Button size="sm" onClick={() => updateMaintenanceRequest(request.id, 'IN_PROGRESS')}>
+                          Start Work
+                        </Button>
+                      )}
+                      {request.status === 'IN_PROGRESS' && (
+                        <Button size="sm" onClick={() => updateMaintenanceRequest(request.id, 'COMPLETED')}>
+                          Mark Complete
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline">
+                        View Details
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {maintenanceRequests.length === 0 && (
+              <div className="text-center py-12">
+                <Settings className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No maintenance requests.</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Maintenance requests will appear here when tenants report issues.
+                </p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Financial Tab */}
+        <TabsContent value="financial" className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Financial Overview</h2>
+              <p className="text-muted-foreground">Track your income, expenses, and financial performance</p>
+            </div>
+            <Button variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Export Report
+            </Button>
+          </div>
+
+          {/* Financial Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">৳{financialData?.monthlyRevenue?.toLocaleString() || '0'}</div>
+                <p className="text-xs text-muted-foreground">Current month earnings</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">৳{financialData?.totalRevenue?.toLocaleString() || '0'}</div>
+                <p className="text-xs text-muted-foreground">All-time earnings</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Average Rent</CardTitle>
+                <Building className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">৳{financialData?.averageRent?.toLocaleString() || '0'}</div>
+                <p className="text-xs text-muted-foreground">Per property</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Occupancy Rate</CardTitle>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{financialData?.occupancyRate?.toFixed(1) || '0'}%</div>
+                <p className="text-xs text-muted-foreground">Current occupancy</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent Transactions */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Transactions</CardTitle>
+              <CardDescription>Latest payments and transactions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {financialData?.recentTransactions?.slice(0, 10).map((transaction) => (
+                  <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <h4 className="font-medium">{transaction.tenant}</h4>
+                      <p className="text-sm text-muted-foreground">{transaction.listing}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-green-600">+৳{transaction.amount?.toLocaleString()}</p>
+                      <Badge className={getStatusColor(transaction.status)}>
+                        {transaction.status}
+                      </Badge>
+                    </div>
+                  </div>
+                )) || (
+                  <p className="text-center text-muted-foreground py-8">
+                    No transactions yet.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Reviews Tab */}
+        <TabsContent value="reviews" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Reviews & Ratings</h2>
+              <p className="text-muted-foreground">Manage tenant reviews and feedback</p>
+            </div>
+          </div>
+          
+          {/* Reviews Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader className="text-center">
+                <CardTitle className="text-3xl font-bold">{analytics?.averageRating?.toFixed(1) || '0.0'}</CardTitle>
+                <CardDescription>Average Rating</CardDescription>
+              </CardHeader>
+              <CardContent className="text-center">
+                <div className="flex justify-center">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star 
+                      key={star} 
+                      className={`h-5 w-5 ${
+                        star <= (analytics?.averageRating || 0) 
+                          ? 'text-yellow-400 fill-yellow-400' 
+                          : 'text-gray-300'
+                      }`} 
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="text-center">
+                <CardTitle className="text-3xl font-bold">{reviews.length}</CardTitle>
+                <CardDescription>Total Reviews</CardDescription>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader className="text-center">
+                <CardTitle className="text-3xl font-bold">
+                  {reviews.filter(r => !r.response).length}
+                </CardTitle>
+                <CardDescription>Pending Responses</CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+
+          {/* Reviews List */}
+          <div className="space-y-4">
+            {Array.isArray(reviews) && reviews.map((review) => (
+              <Card key={review.id}>
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold">{review.reviewerName}</h3>
+                        <div className="flex">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star 
+                              key={star} 
+                              className={`h-4 w-4 ${
+                                star <= review.rating 
+                                  ? 'text-yellow-400 fill-yellow-400' 
+                                  : 'text-gray-300'
+                              }`} 
+                            />
+                          ))}
+                        </div>
+                        <span className="text-sm text-muted-foreground">•</span>
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(review.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Property: {review.listingTitle}
+                      </p>
+                      <p className="mb-4">{review.comment}</p>
+                      {review.response && (
+                        <div className="bg-muted p-4 rounded-lg">
+                          <p className="text-sm font-medium mb-1">Your Response:</p>
+                          <p className="text-sm">{review.response}</p>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Responded on {review.respondedAt && new Date(review.respondedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      {!review.response && (
+                        <Button 
+                          size="sm" 
+                          onClick={() => {
+                            const response = prompt('Enter your response to this review:');
+                            if (response) {
+                              respondToReview(review.id, response);
+                            }
+                          }}
+                        >
+                          <MessageCircle className="h-4 w-4 mr-1" />
+                          Respond
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {reviews.length === 0 && (
+              <div className="text-center py-12">
+                <Star className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No reviews yet.</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Reviews from tenants will appear here after they stay at your properties.
                 </p>
               </div>
             )}
