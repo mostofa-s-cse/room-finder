@@ -27,10 +27,12 @@ import {
   CheckCircle,
   XCircle,
   Eye,
+  EyeOff,
   Ban,
   UnlockKeyhole,
   Calendar,
-  MapPin
+  MapPin,
+  Edit
 } from 'lucide-react';
 import { redirect } from 'next/navigation';
 
@@ -117,6 +119,26 @@ export default function AdminDashboard() {
     endDate: string;
   }>({ startDate: '', endDate: '' });
 
+  // User management states
+  const [selectedUser, setSelectedUser] = useState<UserManagementData | null>(null);
+  const [isViewingUser, setIsViewingUser] = useState(false);
+  const [isEditingUser, setIsEditingUser] = useState(false);
+  const [editUserData, setEditUserData] = useState<{
+    name: string;
+    email: string;
+    role: 'BACHELOR' | 'LANDLORD';
+    status: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
+    password: string;
+    notes: string;
+  }>({ name: '', email: '', role: 'BACHELOR', status: 'ACTIVE', password: '', notes: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [confirmUserAction, setConfirmUserAction] = useState<{
+    type: 'suspend' | 'activate' | 'ban' | 'reactivate' | null;
+    userId: string;
+    userName: string;
+    userStatus: string;
+  }>({ type: null, userId: '', userName: '', userStatus: '' });
+
   useEffect(() => {
     if (status === 'loading') return;
     if (!session || session.user.role !== 'ADMIN') {
@@ -146,16 +168,30 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUserAction = async (userId: string, action: 'suspend' | 'activate' | 'ban') => {
+  const handleUserAction = async (userId: string, action: 'suspend' | 'activate' | 'ban' | 'reactivate') => {
     try {
+      console.log('Sending user action request:', { userId, action });
+      
+      // Map reactivate to activate for API compatibility
+      const apiAction = action === 'reactivate' ? 'activate' : action;
+      
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action: apiAction })
       });
 
+      console.log('User action response status:', response.status);
+
       if (response.ok) {
+        console.log('User action successful');
         fetchAdminData(); // Refresh data
+      } else {
+        const errorText = await response.text();
+        console.error('User action failed:', {
+          status: response.status,
+          error: errorText
+        });
       }
     } catch (error) {
       console.error('Error updating user:', error);
@@ -293,6 +329,144 @@ export default function AdminDashboard() {
       handleExportReviews(dateRange.startDate, dateRange.endDate);
     }
     setShowDateExport({ show: false, type: null });
+  };
+
+  const handleViewUser = async (userId: string) => {
+    // First try to use existing user data from the list
+    const existingUser = users.find(u => u.id === userId);
+    if (existingUser) {
+      setSelectedUser(existingUser);
+      setIsViewingUser(true);
+      return;
+    }
+
+    // Fallback: try to fetch from API if user not found in list
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`);
+      if (response.ok) {
+        const userData = await response.json();
+        setSelectedUser(userData);
+        setIsViewingUser(true);
+      } else {
+        console.error('User not found in API or list');
+      }
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+    }
+  };
+
+  const handleEditUser = (user: UserManagementData) => {
+    setSelectedUser(user);
+    setEditUserData({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      password: '', // Leave empty for optional password change
+      notes: '' // Admin notes for changes
+    });
+    setShowPassword(false); // Reset password visibility
+    setIsViewingUser(false); // Close view modal if open
+    setIsEditingUser(true);
+  };
+
+  const handleConfirmUserAction = (userId: string, action: 'suspend' | 'activate' | 'ban' | 'reactivate', userName: string, userStatus: string) => {
+    setConfirmUserAction({ type: action, userId, userName, userStatus });
+  };
+
+  const executeUserAction = async () => {
+    if (confirmUserAction.type && confirmUserAction.userId) {
+      await handleUserAction(confirmUserAction.userId, confirmUserAction.type);
+      setConfirmUserAction({ type: null, userId: '', userName: '', userStatus: '' });
+    }
+  };
+
+  const handleSaveUserChanges = async () => {
+    if (!selectedUser) return;
+
+    try {
+      console.log('Sending user update request:', {
+        userId: selectedUser.id,
+        data: {
+          name: editUserData.name,
+          email: editUserData.email,
+          role: editUserData.role,
+          status: editUserData.status,
+          notes: editUserData.notes
+        }
+      });
+
+      const requestBody: {
+        name: string;
+        email: string;
+        role: string;
+        status: string;
+        notes: string;
+        password?: string;
+      } = {
+        name: editUserData.name,
+        email: editUserData.email,
+        role: editUserData.role,
+        status: editUserData.status,
+        notes: editUserData.notes
+      };
+
+      // Only include password if it's provided
+      if (editUserData.password.trim()) {
+        requestBody.password = editUserData.password;
+      }
+
+      const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      console.log('Response status:', response.status);
+      const responseData = await response.text();
+      console.log('Response data:', responseData);
+
+      if (response.ok) {
+        // Parse JSON if response is OK
+        try {
+          JSON.parse(responseData);
+        } catch {
+          console.log('Response is not JSON, treating as success');
+        }
+
+        // Update local user data
+        setUsers(users.map(user => 
+          user.id === selectedUser.id 
+            ? { ...user, name: editUserData.name, email: editUserData.email, role: editUserData.role, status: editUserData.status }
+            : user
+        ));
+        
+        // Close edit modal and show success
+        setIsEditingUser(false);
+        setSelectedUser(null);
+        console.log('User updated successfully');
+        
+        // Refresh data to get latest from server
+        fetchAdminData();
+      } else {
+        let errorMessage = 'Failed to update user';
+        try {
+          const errorData = JSON.parse(responseData);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          errorMessage = responseData || errorMessage;
+        }
+        console.error('Failed to update user:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMessage
+        });
+        alert(`Failed to update user: ${errorMessage}`);
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleViewListing = async (listingId: string) => {
@@ -594,7 +768,9 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold">User Management</h2>
-              <p className="text-muted-foreground">Manage user accounts and permissions</p>
+              <p className="text-muted-foreground">
+                Manage user accounts and permissions ({users.length} users loaded)
+              </p>
             </div>
             <div className="flex gap-2">
               <Button onClick={() => handleExportUsers()}>
@@ -652,23 +828,49 @@ export default function AdminDashboard() {
                             <Button 
                               size="sm" 
                               variant="outline"
-                              onClick={() => {/* View user details */}}
+                              onClick={() => {
+                                console.log('View user clicked:', user.id, user.name);
+                                handleViewUser(user.id);
+                              }}
+                              title="View user details"
                             >
                               <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                console.log('Edit user clicked:', user.id, user.name);
+                                handleEditUser(user);
+                              }}
+                              title="Edit user"
+                            >
+                              <Edit className="h-4 w-4" />
                             </Button>
                             {user.status === 'ACTIVE' ? (
                               <Button 
                                 size="sm" 
                                 variant="outline"
-                                onClick={() => handleUserAction(user.id, 'suspend')}
+                                onClick={() => handleConfirmUserAction(user.id, 'suspend', user.name, user.status)}
+                                title="Suspend user"
                               >
                                 <Ban className="h-4 w-4" />
+                              </Button>
+                            ) : user.status === 'SUSPENDED' ? (
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleConfirmUserAction(user.id, 'activate', user.name, user.status)}
+                                title="Activate user"
+                              >
+                                <UnlockKeyhole className="h-4 w-4" />
                               </Button>
                             ) : (
                               <Button 
                                 size="sm" 
                                 variant="outline"
-                                onClick={() => handleUserAction(user.id, 'activate')}
+                                onClick={() => handleConfirmUserAction(user.id, 'reactivate', user.name, user.status)}
+                                title="Reactivate user"
                               >
                                 <UnlockKeyhole className="h-4 w-4" />
                               </Button>
@@ -1066,6 +1268,376 @@ export default function AdminDashboard() {
               disabled={!!(dateRange.startDate && dateRange.endDate && new Date(dateRange.startDate) > new Date(dateRange.endDate))}
             >
               Export Data
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* User Details View Modal */}
+      {isViewingUser && selectedUser && (
+        // Debug: {console.log('Rendering user view modal:', { isViewingUser, selectedUser: selectedUser?.name })}
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">{selectedUser.name}</h2>
+                  <p className="text-muted-foreground">User Details</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    console.log('Closing user view modal');
+                    setIsViewingUser(false);
+                    setSelectedUser(null);
+                  }}
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="grid gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Email</h3>
+                    <p>{selectedUser.email}</p>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Role</h3>
+                    <Badge variant="outline">{selectedUser.role}</Badge>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Status</h3>
+                    <Badge className={getStatusColor(selectedUser.status)}>
+                      {selectedUser.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Last Login</h3>
+                    <p>{selectedUser.lastLogin ? new Date(selectedUser.lastLogin).toLocaleDateString() : 'Never'}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Member Since</h3>
+                    <p>{new Date(selectedUser.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Activity</h3>
+                    <p>
+                      {selectedUser.role === 'LANDLORD' 
+                        ? `${selectedUser.totalListings || 0} listings created`
+                        : `${selectedUser.totalBookings || 0} bookings made`
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button 
+                    onClick={() => {
+                      setIsViewingUser(false);
+                      handleEditUser(selectedUser);
+                    }}
+                    className="flex-1"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit User
+                  </Button>
+                  {selectedUser.status === 'ACTIVE' ? (
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setIsViewingUser(false);
+                        handleConfirmUserAction(selectedUser.id, 'suspend', selectedUser.name, selectedUser.status);
+                      }}
+                      className="flex-1"
+                    >
+                      <Ban className="h-4 w-4 mr-2" />
+                      Suspend User
+                    </Button>
+                  ) : selectedUser.status === 'SUSPENDED' ? (
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setIsViewingUser(false);
+                        handleConfirmUserAction(selectedUser.id, 'activate', selectedUser.name, selectedUser.status);
+                      }}
+                      className="flex-1"
+                    >
+                      <UnlockKeyhole className="h-4 w-4 mr-2" />
+                      Activate User
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setIsViewingUser(false);
+                        handleConfirmUserAction(selectedUser.id, 'reactivate', selectedUser.name, selectedUser.status);
+                      }}
+                      className="flex-1"
+                    >
+                      <UnlockKeyhole className="h-4 w-4 mr-2" />
+                      Reactivate User
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Edit Modal */}
+      {isEditingUser && selectedUser && (
+        // Debug: {console.log('Rendering user edit modal:', { isEditingUser, selectedUser: selectedUser?.name })}
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-lg w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-xl font-bold">Edit User</h2>
+                  <p className="text-muted-foreground">{selectedUser.name}</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    console.log('Closing user edit modal');
+                    setIsEditingUser(false);
+                    setSelectedUser(null);
+                  }}
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Editable user info fields */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Name</label>
+                    <Input 
+                      value={editUserData.name} 
+                      onChange={(e) => setEditUserData({...editUserData, name: e.target.value})}
+                      placeholder="Enter user name"
+                      className="focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Email</label>
+                    <Input 
+                      type="email"
+                      value={editUserData.email} 
+                      onChange={(e) => setEditUserData({...editUserData, email: e.target.value})}
+                      placeholder="Enter email address"
+                      className="focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Password field */}
+                <div>
+                  <label className="text-sm font-medium">Change Password (Optional)</label>
+                  <div className="relative">
+                    <Input 
+                      type={showPassword ? 'text' : 'password'}
+                      value={editUserData.password} 
+                      onChange={(e) => setEditUserData({...editUserData, password: e.target.value})}
+                      placeholder="Enter new password (leave empty to keep current)"
+                      className="focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Leave empty to keep the current password unchanged
+                  </p>
+                </div>
+
+                {/* Editable fields */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Role</label>
+                    <select 
+                      value={editUserData.role}
+                      onChange={(e) => setEditUserData({...editUserData, role: e.target.value as 'BACHELOR' | 'LANDLORD'})}
+                      className="w-full mt-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="BACHELOR">Bachelor</option>
+                      <option value="LANDLORD">Landlord</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Status</label>
+                    <select 
+                      value={editUserData.status}
+                      onChange={(e) => setEditUserData({...editUserData, status: e.target.value as 'ACTIVE' | 'SUSPENDED' | 'BANNED'})}
+                      className="w-full mt-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="SUSPENDED">Suspended</option>
+                      <option value="BANNED">Banned</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Admin Notes</label>
+                  <textarea 
+                    value={editUserData.notes}
+                    onChange={(e) => setEditUserData({...editUserData, notes: e.target.value})}
+                    placeholder="Add notes about this change (optional)"
+                    className="w-full mt-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Current vs New comparison */}
+                {(editUserData.name !== selectedUser.name || editUserData.email !== selectedUser.email || editUserData.role !== selectedUser.role || editUserData.status !== selectedUser.status || editUserData.password.trim()) && (
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <h4 className="text-sm font-medium text-blue-800 mb-2">Changes Preview:</h4>
+                    <div className="text-xs space-y-1">
+                      {editUserData.name !== selectedUser.name && (
+                        <div className="flex justify-between">
+                          <span>Name:</span>
+                          <span>
+                            <span className="text-gray-500">{selectedUser.name}</span>
+                            <span className="mx-1">→</span>
+                            <span className="text-blue-600 font-medium">{editUserData.name}</span>
+                          </span>
+                        </div>
+                      )}
+                      {editUserData.email !== selectedUser.email && (
+                        <div className="flex justify-between">
+                          <span>Email:</span>
+                          <span>
+                            <span className="text-gray-500">{selectedUser.email}</span>
+                            <span className="mx-1">→</span>
+                            <span className="text-blue-600 font-medium">{editUserData.email}</span>
+                          </span>
+                        </div>
+                      )}
+                      {editUserData.role !== selectedUser.role && (
+                        <div className="flex justify-between">
+                          <span>Role:</span>
+                          <span>
+                            <span className="text-gray-500">{selectedUser.role}</span>
+                            <span className="mx-1">→</span>
+                            <span className="text-blue-600 font-medium">{editUserData.role}</span>
+                          </span>
+                        </div>
+                      )}
+                      {editUserData.status !== selectedUser.status && (
+                        <div className="flex justify-between">
+                          <span>Status:</span>
+                          <span>
+                            <span className="text-gray-500">{selectedUser.status}</span>
+                            <span className="mx-1">→</span>
+                            <span className="text-blue-600 font-medium">{editUserData.status}</span>
+                          </span>
+                        </div>
+                      )}
+                      {editUserData.password.trim() && (
+                        <div className="flex justify-between">
+                          <span>Password:</span>
+                          <span className="text-blue-600 font-medium">Will be updated</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      console.log('Cancel edit user');
+                      setIsEditingUser(false);
+                      setSelectedUser(null);
+                    }}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleSaveUserChanges}
+                    className="flex-1"
+                    disabled={editUserData.name === selectedUser.name && editUserData.email === selectedUser.email && editUserData.role === selectedUser.role && editUserData.status === selectedUser.status && !editUserData.password.trim()}
+                  >
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Action Confirmation Dialog */}
+      <AlertDialog open={confirmUserAction.type !== null} onOpenChange={() => setConfirmUserAction({ type: null, userId: '', userName: '', userStatus: '' })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmUserAction.type === 'suspend' ? 'Suspend User?' : 
+               confirmUserAction.type === 'activate' ? 'Activate User?' : 
+               confirmUserAction.type === 'reactivate' ? 'Reactivate User?' :
+               'Ban User?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmUserAction.type === 'suspend' ? 
+                `Are you sure you want to suspend "${confirmUserAction.userName}"? They will be unable to access their account until reactivated.` :
+               confirmUserAction.type === 'activate' ?
+                `Are you sure you want to activate "${confirmUserAction.userName}"? They will regain access to their account.` :
+               confirmUserAction.type === 'reactivate' ?
+                `Are you sure you want to reactivate "${confirmUserAction.userName}"? This will restore their account access and set their status to active.` :
+                `Are you sure you want to permanently ban "${confirmUserAction.userName}"? This action cannot be undone.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmUserAction({ type: null, userId: '', userName: '', userStatus: '' })}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeUserAction}
+              className={confirmUserAction.type === 'ban' || confirmUserAction.type === 'suspend' ? 'bg-destructive text-white hover:bg-destructive/90' : ''}
+            >
+              {confirmUserAction.type === 'suspend' ? (
+                <>
+                  <Ban className="h-4 w-4 mr-2" />
+                  Suspend
+                </>
+              ) : confirmUserAction.type === 'activate' ? (
+                <>
+                  <UnlockKeyhole className="h-4 w-4 mr-2" />
+                  Activate
+                </>
+              ) : confirmUserAction.type === 'reactivate' ? (
+                <>
+                  <UnlockKeyhole className="h-4 w-4 mr-2" />
+                  Reactivate
+                </>
+              ) : (
+                <>
+                  <Ban className="h-4 w-4 mr-2" />
+                  Ban User
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
