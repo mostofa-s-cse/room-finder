@@ -34,7 +34,7 @@ import {
   MapPin,
   Edit
 } from 'lucide-react';
-import { redirect } from 'next/navigation';
+import { redirect, useRouter } from 'next/navigation';
 
 interface AdminStats {
   totalUsers: number;
@@ -83,8 +83,11 @@ interface ReviewModerationData {
   reportCount?: number;
 }
 
+
+
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<UserManagementData[]>([]);
   const [listings, setListings] = useState<ListingModerationData[]>([]);
@@ -138,6 +141,8 @@ export default function AdminDashboard() {
     userName: string;
     userStatus: string;
   }>({ type: null, userId: '', userName: '', userStatus: '' });
+
+
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -381,6 +386,10 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleViewAnalytics = () => {
+    router.push('/dashboard/admin/analytics');
+  };
+
   const handleSaveUserChanges = async () => {
     if (!selectedUser) return;
 
@@ -614,7 +623,7 @@ export default function AdminDashboard() {
             <Shield className="h-4 w-4 mr-2" />
             Security Logs
           </Button>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={handleViewAnalytics}>
             <BarChart3 className="h-4 w-4 mr-2" />
             Analytics
           </Button>
@@ -754,7 +763,7 @@ export default function AdminDashboard() {
                   <MessageSquare className="h-4 w-4 mr-2" />
                   Review Comments ({reviews.filter(r => r.status === 'PENDING').length} pending)
                 </Button>
-                <Button className="w-full justify-start" variant="outline">
+                <Button className="w-full justify-start" variant="outline" onClick={handleViewAnalytics}>
                   <BarChart3 className="h-4 w-4 mr-2" />
                   View Analytics
                 </Button>
@@ -1642,6 +1651,8 @@ export default function AdminDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+
     </div>
   );
 }
