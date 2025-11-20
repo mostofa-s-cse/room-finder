@@ -32,7 +32,8 @@ import {
   UnlockKeyhole,
   Calendar,
   MapPin,
-  Edit
+  Edit,
+  Settings
 } from 'lucide-react';
 import { redirect, useRouter } from 'next/navigation';
 
@@ -394,6 +395,10 @@ export default function AdminDashboard() {
     router.push('/dashboard/admin/security-logs');
   };
 
+  const handleViewSettings = () => {
+    router.push('/dashboard/admin/settings');
+  };
+
   const handleSaveUserChanges = async () => {
     if (!selectedUser) return;
 
@@ -631,6 +636,10 @@ export default function AdminDashboard() {
             <BarChart3 className="h-4 w-4 mr-2" />
             Analytics
           </Button>
+          <Button variant="outline" size="sm" onClick={handleViewSettings}>
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </Button>
         </div>
       </div>
 
@@ -770,6 +779,10 @@ export default function AdminDashboard() {
                 <Button className="w-full justify-start" variant="outline" onClick={handleViewAnalytics}>
                   <BarChart3 className="h-4 w-4 mr-2" />
                   View Analytics
+                </Button>
+                <Button className="w-full justify-start" variant="outline" onClick={handleViewSettings}>
+                  <Settings className="h-4 w-4 mr-2" />
+                  Admin Settings
                 </Button>
               </CardContent>
             </Card>
