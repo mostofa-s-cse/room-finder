@@ -13,17 +13,14 @@ import {
   MessageSquare, 
   BarChart3, 
   Shield, 
-  AlertTriangle,
   CheckCircle,
   XCircle,
   Eye,
   Ban,
   UnlockKeyhole,
-  TrendingUp,
   Calendar,
   MapPin
 } from 'lucide-react';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 interface AdminStats {
@@ -55,7 +52,8 @@ interface ListingModerationData {
   landlordName: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REPORTED';
   location: string;
-  monthlyRent: number;
+  monthlyRent?: number;
+  price?: number;
   createdAt: string;
   reportCount?: number;
   lastReported?: string;
@@ -80,6 +78,12 @@ export default function AdminDashboard() {
   const [reviews, setReviews] = useState<ReviewModerationData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Pagination states
+  const [userPage, setUserPage] = useState(1);
+  const [listingPage, setListingPage] = useState(1);
+  const [reviewPage, setReviewPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -166,6 +170,78 @@ export default function AdminDashboard() {
       case 'BANNED': case 'REPORTED': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  // Pagination helpers
+  const getPaginatedData = <T,>(data: T[], currentPage: number): T[] => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return data.slice(startIndex, endIndex);
+  };
+
+  const getTotalPages = (totalItems: number) => {
+    return Math.ceil(totalItems / itemsPerPage);
+  };
+
+  const PaginationControls = ({ currentPage, totalItems, onPageChange }: {
+    currentPage: number;
+    totalItems: number;
+    onPageChange: (page: number) => void;
+  }) => {
+    const totalPages = getTotalPages(totalItems);
+    const startItem = (currentPage - 1) * itemsPerPage + 1;
+    const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+    return (
+      <div className="flex items-center justify-between px-4 py-3 border-t">
+        <div className="text-sm text-muted-foreground">
+          Showing {startItem} to {endItem} of {totalItems} items
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage <= 1}
+          >
+            Previous
+          </Button>
+          <div className="flex gap-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(page => 
+                page === 1 || 
+                page === totalPages || 
+                (page >= currentPage - 2 && page <= currentPage + 2)
+              )
+              .map((page, index, array) => {
+                const showEllipsis = index > 0 && page - array[index - 1] > 1;
+                return (
+                  <div key={page} className="flex items-center gap-1">
+                    {showEllipsis && <span className="px-2 text-muted-foreground">...</span>}
+                    <Button
+                      variant={currentPage === page ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => onPageChange(page)}
+                      className="w-8 h-8 p-0"
+                    >
+                      {page}
+                    </Button>
+                  </div>
+                );
+              })
+            }
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= totalPages}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -368,7 +444,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map((user) => (
+                    {getPaginatedData(users, userPage).map((user) => (
                       <tr key={user.id} className="border-b">
                         <td className="p-4">
                           <div>
@@ -426,6 +502,11 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+              <PaginationControls
+                currentPage={userPage}
+                totalItems={users.length}
+                onPageChange={setUserPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -458,14 +539,14 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {Array.isArray(listings) && listings.map((listing) => (
+                    {Array.isArray(listings) && getPaginatedData(listings, listingPage).map((listing) => (
                       <tr key={listing.id} className="border-b">
                         <td className="p-4">
                           <div>
                             <div className="font-medium">{listing.title}</div>
                             <div className="text-sm text-muted-foreground flex items-center gap-1">
                               <MapPin className="h-3 w-3" />
-                              {listing.location}
+                              {listing.location || 'Location not specified'}
                             </div>
                           </div>
                         </td>
@@ -475,7 +556,9 @@ export default function AdminDashboard() {
                             {listing.status}
                           </Badge>
                         </td>
-                        <td className="p-4 font-medium">৳{listing.monthlyRent ? listing.monthlyRent.toLocaleString() : 'N/A'}</td>
+                        <td className="p-4 font-medium">
+                          ৳{(listing.monthlyRent || 0).toLocaleString()}
+                        </td>
                         <td className="p-4">
                           {listing.reportCount ? (
                             <Badge variant="destructive" className="text-xs">
@@ -515,6 +598,11 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+              <PaginationControls
+                currentPage={listingPage}
+                totalItems={listings.length}
+                onPageChange={setListingPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -532,9 +620,10 @@ export default function AdminDashboard() {
             </Button>
           </div>
 
-          <div className="grid gap-4">
-            {reviews.map((review) => (
-              <Card key={review.id}>
+          <div className="space-y-4">
+            <div className="grid gap-4">
+              {getPaginatedData(reviews, reviewPage).map((review) => (
+                <Card key={review.id}>
                 <CardContent className="p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
@@ -593,6 +682,16 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             ))}
+            </div>
+            {reviews.length > 0 && (
+              <Card>
+                <PaginationControls
+                  currentPage={reviewPage}
+                  totalItems={reviews.length}
+                  onPageChange={setReviewPage}
+                />
+              </Card>
+            )}
           </div>
         </TabsContent>
       </Tabs>
