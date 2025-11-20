@@ -5,8 +5,19 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { 
   Users, 
   Home, 
@@ -85,6 +96,27 @@ export default function AdminDashboard() {
   const [reviewPage, setReviewPage] = useState(1);
   const itemsPerPage = 10;
 
+  // View states
+  const [selectedListing, setSelectedListing] = useState<ListingModerationData | null>(null);
+  const [isViewingListing, setIsViewingListing] = useState(false);
+
+  // Confirmation states
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'approve' | 'reject' | null;
+    listingId: string;
+    listingTitle: string;
+  }>({ type: null, listingId: '', listingTitle: '' });
+
+  // Date range export states
+  const [showDateExport, setShowDateExport] = useState<{
+    show: boolean;
+    type: 'users' | 'listings' | 'reviews' | null;
+  }>({ show: false, type: null });
+  const [dateRange, setDateRange] = useState<{
+    startDate: string;
+    endDate: string;
+  }>({ startDate: '', endDate: '' });
+
   useEffect(() => {
     if (status === 'loading') return;
     if (!session || session.user.role !== 'ADMIN') {
@@ -140,10 +172,16 @@ export default function AdminDashboard() {
 
       if (response.ok) {
         fetchAdminData(); // Refresh data
+        // Reset confirmation state
+        setConfirmAction({ type: null, listingId: '', listingTitle: '' });
       }
     } catch (error) {
       console.error('Error updating listing:', error);
     }
+  };
+
+  const handleConfirmAction = (listingId: string, action: 'approve' | 'reject', listingTitle: string) => {
+    setConfirmAction({ type: action, listingId, listingTitle });
   };
 
   const handleReviewAction = async (reviewId: string, action: 'approve' | 'reject') => {
@@ -159,6 +197,129 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error('Error updating review:', error);
+    }
+  };
+
+  const exportToCSV = (data: Record<string, string | number>[], filename: string, headers: string[]) => {
+    const csvContent = [
+      headers.join(','),
+      ...data.map(row => 
+        headers.map(header => {
+          // Create a normalized key from header (remove spaces, convert to lowercase)
+          const normalizedKey = header.toLowerCase().replace(/\s+/g, '');
+          const value = row[normalizedKey] || row[header] || '';
+          // Escape quotes and wrap in quotes if contains comma, quote, or newline
+          const stringValue = String(value).replace(/"/g, '""');
+          return stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n') 
+            ? `"${stringValue}"` 
+            : stringValue;
+        }).join(',')
+      )
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleExportUsers = (startDate?: string, endDate?: string) => {
+    const headers = ['Name', 'Email', 'Role', 'Status', 'Created At', 'Last Login', 'Total Bookings', 'Total Listings'];
+    const filteredUsers = startDate || endDate ? filterDataByDateRange(users, startDate || '', endDate || '') : users;
+    const exportData = filteredUsers.map(user => ({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      createdat: new Date(user.createdAt).toLocaleDateString(),
+      lastlogin: user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never',
+      totalbookings: user.totalBookings || 0,
+      totallistings: user.totalListings || 0
+    }));
+    const filename = startDate || endDate ? `users_export_${startDate || 'all'}_to_${endDate || 'now'}` : 'users_export';
+    exportToCSV(exportData, filename, headers);
+  };
+
+  const handleExportListings = (startDate?: string, endDate?: string) => {
+    const headers = ['Title', 'Landlord', 'Status', 'Monthly Rent', 'Location', 'Created At', 'Report Count'];
+    const filteredListings = startDate || endDate ? filterDataByDateRange(listings, startDate || '', endDate || '') : listings;
+    const exportData = filteredListings.map(listing => ({
+      title: listing.title,
+      landlord: listing.landlordName,
+      status: listing.status,
+      monthlyrent: listing.monthlyRent || 0,
+      location: listing.location || 'Not specified',
+      createdat: new Date(listing.createdAt).toLocaleDateString(),
+      reportcount: listing.reportCount || 0
+    }));
+    const filename = startDate || endDate ? `listings_export_${startDate || 'all'}_to_${endDate || 'now'}` : 'listings_export';
+    exportToCSV(exportData, filename, headers);
+  };
+
+  const handleExportReviews = (startDate?: string, endDate?: string) => {
+    const headers = ['Reviewer', 'Rating', 'Comment', 'Listing Title', 'Status', 'Created At', 'Report Count'];
+    const filteredReviews = startDate || endDate ? filterDataByDateRange(reviews, startDate || '', endDate || '') : reviews;
+    const exportData = filteredReviews.map(review => ({
+      reviewer: review.reviewerName,
+      rating: review.rating,
+      comment: review.comment,
+      listingtitle: review.listingTitle,
+      status: review.status,
+      createdat: new Date(review.createdAt).toLocaleDateString(),
+      reportcount: review.reportCount || 0
+    }));
+    const filename = startDate || endDate ? `reviews_export_${startDate || 'all'}_to_${endDate || 'now'}` : 'reviews_export';
+    exportToCSV(exportData, filename, headers);
+  };
+
+  const handleShowDateExport = (type: 'users' | 'listings' | 'reviews') => {
+    setShowDateExport({ show: true, type });
+    setDateRange({ startDate: '', endDate: '' });
+  };
+
+  const handleDateExport = () => {
+    if (showDateExport.type === 'users') {
+      handleExportUsers(dateRange.startDate, dateRange.endDate);
+    } else if (showDateExport.type === 'listings') {
+      handleExportListings(dateRange.startDate, dateRange.endDate);
+    } else if (showDateExport.type === 'reviews') {
+      handleExportReviews(dateRange.startDate, dateRange.endDate);
+    }
+    setShowDateExport({ show: false, type: null });
+  };
+
+  const handleViewListing = async (listingId: string) => {
+    try {
+      const response = await fetch(`/api/listings/${listingId}`);
+      if (response.ok) {
+        const data = await response.json();
+        const listingData = data.data || data;
+        
+        // Convert to our interface format
+        const formattedListing: ListingModerationData = {
+          id: listingData.id,
+          title: listingData.title,
+          landlordName: listingData.landlord?.name || 'Unknown',
+          status: listingData.status,
+          location: listingData.location || listingData.address || listingData.city,
+          monthlyRent: listingData.monthlyRent || listingData.price,
+          price: listingData.price,
+          createdAt: listingData.createdAt,
+          reportCount: listingData.reportCount || 0
+        };
+        
+        setSelectedListing(formattedListing);
+        setIsViewingListing(true);
+      }
+    } catch (error) {
+      console.error('Error fetching listing details:', error);
     }
   };
 
@@ -181,6 +342,18 @@ export default function AdminDashboard() {
 
   const getTotalPages = (totalItems: number) => {
     return Math.ceil(totalItems / itemsPerPage);
+  };
+
+  const filterDataByDateRange = <T extends { createdAt: string }>(data: T[], startDate: string, endDate: string): T[] => {
+    if (!startDate && !endDate) return data;
+    
+    return data.filter(item => {
+      const itemDate = new Date(item.createdAt);
+      const start = startDate ? new Date(startDate) : new Date('1900-01-01');
+      const end = endDate ? new Date(endDate + 'T23:59:59') : new Date();
+      
+      return itemDate >= start && itemDate <= end;
+    });
   };
 
   const PaginationControls = ({ currentPage, totalItems, onPageChange }: {
@@ -423,10 +596,15 @@ export default function AdminDashboard() {
               <h2 className="text-2xl font-bold">User Management</h2>
               <p className="text-muted-foreground">Manage user accounts and permissions</p>
             </div>
-            <Button>
-              <Users className="h-4 w-4 mr-2" />
-              Export Users
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => handleExportUsers()}>
+                <Users className="h-4 w-4 mr-2" />
+                Export All Users
+              </Button>
+              <Button variant="outline" onClick={() => handleShowDateExport('users')}>
+                Export by Date
+              </Button>
+            </div>
           </div>
 
           <Card>
@@ -518,10 +696,15 @@ export default function AdminDashboard() {
               <h2 className="text-2xl font-bold">Listing Moderation</h2>
               <p className="text-muted-foreground">Review and moderate property listings</p>
             </div>
-            <Button>
-              <Home className="h-4 w-4 mr-2" />
-              Export Listings
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => handleExportListings()}>
+                <Home className="h-4 w-4 mr-2" />
+                Export All Listings
+              </Button>
+              <Button variant="outline" onClick={() => handleShowDateExport('listings')}>
+                Export by Date
+              </Button>
+            </div>
           </div>
 
           <Card>
@@ -570,7 +753,12 @@ export default function AdminDashboard() {
                         </td>
                         <td className="p-4">
                           <div className="flex gap-2">
-                            <Button size="sm" variant="outline">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleViewListing(listing.id)}
+                              title="View listing details"
+                            >
                               <Eye className="h-4 w-4" />
                             </Button>
                             {listing.status === 'PENDING' && (
@@ -578,14 +766,14 @@ export default function AdminDashboard() {
                                 <Button 
                                   size="sm" 
                                   variant="default"
-                                  onClick={() => handleListingAction(listing.id, 'approve')}
+                                  onClick={() => handleConfirmAction(listing.id, 'approve', listing.title)}
                                 >
                                   <CheckCircle className="h-4 w-4" />
                                 </Button>
                                 <Button 
                                   size="sm" 
                                   variant="destructive"
-                                  onClick={() => handleListingAction(listing.id, 'reject')}
+                                  onClick={() => handleConfirmAction(listing.id, 'reject', listing.title)}
                                 >
                                   <XCircle className="h-4 w-4" />
                                 </Button>
@@ -614,10 +802,15 @@ export default function AdminDashboard() {
               <h2 className="text-2xl font-bold">Review Management</h2>
               <p className="text-muted-foreground">Moderate user reviews and ratings</p>
             </div>
-            <Button>
-              <MessageSquare className="h-4 w-4 mr-2" />
-              Export Reviews
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => handleExportReviews()}>
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Export All Reviews
+              </Button>
+              <Button variant="outline" onClick={() => handleShowDateExport('reviews')}>
+                Export by Date
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -695,6 +888,188 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Listing Details Modal */}
+      {isViewingListing && selectedListing && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">{selectedListing.title}</h2>
+                  <p className="text-muted-foreground">Listing Details</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setIsViewingListing(false)}
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="grid gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Landlord</h3>
+                    <p>{selectedListing.landlordName}</p>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Status</h3>
+                    <Badge className={getStatusColor(selectedListing.status)}>
+                      {selectedListing.status}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Monthly Rent</h3>
+                    <p className="text-lg font-semibold">৳{(selectedListing.monthlyRent || 0).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm text-muted-foreground">Reports</h3>
+                    <p className={selectedListing.reportCount ? 'text-red-600' : 'text-green-600'}>
+                      {selectedListing.reportCount || 0} reports
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-sm text-muted-foreground">Location</h3>
+                  <p className="flex items-center gap-1">
+                    <MapPin className="h-4 w-4" />
+                    {selectedListing.location || 'Location not specified'}
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold text-sm text-muted-foreground">Created</h3>
+                  <p>{new Date(selectedListing.createdAt).toLocaleDateString()}</p>
+                </div>
+
+                {selectedListing.status === 'PENDING' && (
+                  <div className="flex gap-2 pt-4 border-t">
+                    <Button 
+                      onClick={() => {
+                        handleConfirmAction(selectedListing.id, 'approve', selectedListing.title);
+                        setIsViewingListing(false);
+                      }}
+                      className="flex-1"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Approve Listing
+                    </Button>
+                    <Button 
+                      variant="destructive"
+                      onClick={() => {
+                        handleConfirmAction(selectedListing.id, 'reject', selectedListing.title);
+                        setIsViewingListing(false);
+                      }}
+                      className="flex-1"
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Reject Listing
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Alert Dialog */}
+      <AlertDialog open={confirmAction.type !== null} onOpenChange={() => setConfirmAction({ type: null, listingId: '', listingTitle: '' })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction.type === 'approve' ? 'Approve Listing?' : 'Reject Listing?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction.type === 'approve' 
+                ? `Are you sure you want to approve "${confirmAction.listingTitle}"? This will make the listing visible to all users.`
+                : `Are you sure you want to reject "${confirmAction.listingTitle}"? This action will prevent the listing from being published.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmAction({ type: null, listingId: '', listingTitle: '' })}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmAction.type && confirmAction.listingId) {
+                  handleListingAction(confirmAction.listingId, confirmAction.type);
+                }
+              }}
+              className={confirmAction.type === 'reject' ? 'bg-destructive text-white hover:bg-destructive/90' : ''}
+            >
+              {confirmAction.type === 'approve' ? (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Approve
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Reject
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Date Export Modal */}
+      <AlertDialog open={showDateExport.show} onOpenChange={() => setShowDateExport({ show: false, type: null })}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Export {showDateExport.type ? showDateExport.type.charAt(0).toUpperCase() + showDateExport.type.slice(1) : 'Data'} by Date Range</AlertDialogTitle>
+            <AlertDialogDescription>
+              Select a date range to filter the export. Leave fields empty to include all dates.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="startDate" className="text-sm font-medium">Start Date</label>
+              <Input
+                id="startDate"
+                type="date"
+                value={dateRange.startDate}
+                onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
+                placeholder="Select start date"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="endDate" className="text-sm font-medium">End Date</label>
+              <Input
+                id="endDate"
+                type="date"
+                value={dateRange.endDate}
+                onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
+                placeholder="Select end date"
+              />
+            </div>
+            {dateRange.startDate && dateRange.endDate && new Date(dateRange.startDate) > new Date(dateRange.endDate) && (
+              <p className="text-sm text-red-600">Start date should be before end date</p>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDateExport({ show: false, type: null })}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDateExport}
+              disabled={!!(dateRange.startDate && dateRange.endDate && new Date(dateRange.startDate) > new Date(dateRange.endDate))}
+            >
+              Export Data
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
