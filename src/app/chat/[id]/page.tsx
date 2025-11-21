@@ -32,11 +32,15 @@ interface Message {
 
 interface ChatThread {
   id: string;
+  participantId: string;
   participantName: string;
   participantAvatar?: string;
   participantRole: 'BACHELOR' | 'LANDLORD';
+  listingId?: string;
   listingTitle?: string;
   lastMessageAt: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export default function ChatThreadPage() {
@@ -50,6 +54,9 @@ export default function ChatThreadPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
 
+
+
+
   useEffect(() => {
     if (status === 'loading') return;
     if (!session) {
@@ -60,45 +67,46 @@ export default function ChatThreadPage() {
       try {
         setIsLoading(true);
         
-        // For now, use mock data since the chat system isn't fully implemented
-        const mockThread: ChatThread = {
-          id: chatId,
-          participantName: session?.user.role === 'BACHELOR' ? 'Ahmed Khan' : 'John Doe',
-          participantAvatar: '',
-          participantRole: session?.user.role === 'BACHELOR' ? 'LANDLORD' : 'BACHELOR',
-          listingTitle: 'Cozy Studio in Dhanmondi',
-          lastMessageAt: new Date().toISOString()
-        };
-
-        const mockMessages: Message[] = [
-          {
-            id: '1',
-            content: 'Hello! I saw your listing for the studio apartment. Is it still available?',
-            senderId: session?.user.role === 'BACHELOR' ? session?.user.id || 'current-user' : 'other-user',
-            senderName: session?.user.role === 'BACHELOR' ? session?.user.name || 'You' : mockThread.participantName,
-            createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-            isRead: true
-          },
-          {
-            id: '2',
-            content: 'Yes, it&apos;s still available! When would you like to schedule a viewing?',
-            senderId: session?.user.role === 'BACHELOR' ? 'other-user' : session?.user.id || 'current-user',
-            senderName: session?.user.role === 'BACHELOR' ? mockThread.participantName : session?.user.name || 'You',
-            createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1 hour ago
-            isRead: true
-          },
-          {
-            id: '3',
-            content: 'How about tomorrow evening? I&apos;m free after 5 PM.',
-            senderId: session?.user.role === 'BACHELOR' ? session?.user.id || 'current-user' : 'other-user',
-            senderName: session?.user.role === 'BACHELOR' ? session?.user.name || 'You' : mockThread.participantName,
-            createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutes ago
-            isRead: false
-          }
-        ];
-
-        setThread(mockThread);
-        setMessages(mockMessages);
+        const [threadResponse, messagesResponse] = await Promise.all([
+          fetch(`/api/chat/threads/${chatId}`),
+          fetch(`/api/chat/threads/${chatId}/messages`)
+        ]);
+        
+        if (threadResponse.ok) {
+          const threadData = await threadResponse.json();
+          setThread(threadData.data);
+        } else {
+          console.error('Failed to fetch thread:', threadResponse.status);
+        }
+        
+        if (messagesResponse.ok) {
+          const messagesData = await messagesResponse.json();
+          const messagesList = Array.isArray(messagesData.data) ? messagesData.data : [];
+          setMessages(messagesList);
+          
+          // Mark messages as read after a short delay (only once per load)
+          setTimeout(() => {
+            const hasUnread = messagesList.some((msg: Message) => 
+              !msg.isRead && msg.senderId !== session?.user.id
+            );
+            if (hasUnread) {
+              fetch(`/api/chat/threads/${chatId}/mark-read`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              }).then(response => {
+                if (response.ok) {
+                  setMessages(prev => prev.map(msg => ({ ...msg, isRead: true })));
+                  window.dispatchEvent(new CustomEvent('chatReadUpdate', { detail: { threadId: chatId } }));
+                }
+              }).catch(error => {
+                console.error('Error marking messages as read:', error);
+              });
+            }
+          }, 1000);
+        } else {
+          console.error('Failed to fetch messages:', messagesResponse.status);
+          setMessages([]);
+        }
       } catch (error) {
         console.error('Error fetching chat data:', error);
       } finally {
@@ -108,8 +116,6 @@ export default function ChatThreadPage() {
     
     loadChatData();
   }, [session, status, chatId]);
-
-
 
   const sendMessage = async () => {
     if (!newMessage.trim() || isSending) return;
@@ -123,26 +129,37 @@ export default function ChatThreadPage() {
         content: newMessage,
         senderId: session?.user.id || 'current-user',
         senderName: session?.user.name || 'You',
+        senderAvatar: session?.user.image || undefined,
         createdAt: new Date().toISOString(),
         isRead: false
       };
 
       // Add message optimistically
       setMessages(prev => [...prev, optimisticMessage]);
+      const messageContent = newMessage;
       setNewMessage('');
 
-      // TODO: Replace with actual API call
-      // await fetch(`/api/chat/threads/${chatId}/messages`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ content: newMessage })
-      // });
-
-      console.log('Message sent:', newMessage);
+      // Send message to API
+      const response = await fetch(`/api/chat/threads/${chatId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: messageContent })
+      });
+      
+      if (response.ok) {
+        const sentMessage = await response.json();
+        // Replace optimistic message with real message
+        setMessages(prev => prev.map(msg => 
+          msg.id === optimisticMessage.id ? sentMessage.data : msg
+        ));
+      } else {
+        // Remove optimistic message on error
+        setMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
+        throw new Error('Failed to send message');
+      }
     } catch (error) {
       console.error('Error sending message:', error);
-      // Remove optimistic message on error
-      setMessages(prev => prev.filter(msg => !msg.id.startsWith('temp-')));
+      // Optimistic message already removed in the error case above
     } finally {
       setIsSending(false);
     }
@@ -167,7 +184,7 @@ export default function ChatThreadPage() {
     return (
       <div className="h-screen flex items-center justify-center flex-col space-y-4">
         <h2 className="text-xl font-semibold">Chat not found</h2>
-        <Link href="/dashboard/bachelor?tab=chats">
+        <Link href="/chat">
           <Button>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Messages
@@ -178,35 +195,39 @@ export default function ChatThreadPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="container mx-auto py-6 space-y-6">
       {/* Chat Header */}
-      <div className="border-b bg-card p-4">
+      <div className="border-b bg-white shadow-sm p-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Link href={`/dashboard/${session?.user.role?.toLowerCase()}?tab=chats`}>
-              <Button variant="ghost" size="sm">
+          <div className="flex items-center space-x-4">
+            <Link href="/chat">
+              <Button variant="ghost" size="sm" className="hover:bg-gray-100">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <Avatar>
+            <Avatar className="h-12 w-12">
               <AvatarImage src={thread.participantAvatar} />
-              <AvatarFallback>{thread.participantName.charAt(0)}</AvatarFallback>
+              <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
+                {thread.participantName.charAt(0)}
+              </AvatarFallback>
             </Avatar>
             <div>
-              <h3 className="font-semibold">{thread.participantName}</h3>
-              <p className="text-sm text-muted-foreground">
-                {thread.listingTitle && `About: ${thread.listingTitle}`}
+              <h3 className="font-semibold text-lg text-gray-900">{thread.participantName}</h3>
+              <p className="text-sm text-gray-600">
+                {thread.participantRole === 'LANDLORD' ? '🏠 Landlord' : '👤 Tenant'}
+                {thread.listingTitle && ` • ${thread.listingTitle}`}
               </p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" className="hover:bg-gray-100">
               <Phone className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" className="hover:bg-gray-100">
               <Video className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" className="hover:bg-gray-100">
               <MoreVertical className="h-4 w-4" />
             </Button>
           </div>
@@ -214,7 +235,7 @@ export default function ChatThreadPage() {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
         {messages.map((message) => {
           const isCurrentUser = message.senderId === session?.user.id || message.senderName === 'You';
           
@@ -223,23 +244,25 @@ export default function ChatThreadPage() {
               key={message.id}
               className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`flex items-start space-x-2 max-w-[70%] ${isCurrentUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
+              <div className={`flex items-start space-x-3 max-w-[75%] ${isCurrentUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
                 {!isCurrentUser && (
-                  <Avatar className="w-8 h-8">
+                  <Avatar className="w-10 h-10">
                     <AvatarImage src={message.senderAvatar} />
-                    <AvatarFallback>{message.senderName.charAt(0)}</AvatarFallback>
+                    <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
+                      {message.senderName.charAt(0)}
+                    </AvatarFallback>
                   </Avatar>
                 )}
-                <div className={`rounded-lg p-3 ${
+                <div className={`rounded-2xl px-4 py-3 shadow-sm ${
                   isCurrentUser 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'bg-muted'
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-gray-100 text-gray-900'
                 }`}>
-                  <p className="text-sm">{message.content}</p>
-                  <p className={`text-xs mt-1 ${
+                  <p className="text-sm leading-relaxed">{message.content}</p>
+                  <p className={`text-xs mt-2 ${
                     isCurrentUser 
-                      ? 'text-primary-foreground/70' 
-                      : 'text-muted-foreground'
+                      ? 'text-blue-100' 
+                      : 'text-gray-500'
                   }`}>
                     {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
                   </p>
@@ -251,10 +274,10 @@ export default function ChatThreadPage() {
       </div>
 
       {/* Message Input */}
-      <div className="border-t bg-card p-4">
-        <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="sm">
-            <Paperclip className="h-4 w-4" />
+      <div className="border-t bg-white shadow-lg p-4">
+        <div className="flex items-center space-x-3 max-w-4xl mx-auto">
+          <Button variant="ghost" size="sm" className="hover:bg-gray-100">
+            <Paperclip className="h-4 w-4 text-gray-500" />
           </Button>
           <div className="flex-1 relative">
             <Input
@@ -262,26 +285,27 @@ export default function ChatThreadPage() {
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Type a message..."
-              className="pr-10"
+              className="pr-12 py-3 rounded-full border-gray-200 focus:border-blue-500 focus:ring-blue-500"
               disabled={isSending}
             />
             <Button
               variant="ghost"
               size="sm"
-              className="absolute right-1 top-1/2 transform -translate-y-1/2"
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 hover:bg-gray-100"
             >
-              <Smile className="h-4 w-4" />
+              <Smile className="h-4 w-4 text-gray-500" />
             </Button>
           </div>
           <Button 
             onClick={sendMessage} 
             disabled={!newMessage.trim() || isSending}
-            className="shrink-0"
+            className="rounded-full h-10 w-10 p-0 bg-blue-500 hover:bg-blue-600"
           >
             <Send className="h-4 w-4" />
           </Button>
         </div>
       </div>
+    </div>
     </div>
   );
 }

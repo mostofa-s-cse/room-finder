@@ -76,16 +76,27 @@ interface Tenant {
   email: string;
   phone?: string;
   profilePicture?: string;
+  joinedAt: string;
+  totalBookings: number;
+  totalReviews: number;
+  currentStatus: 'ACTIVE' | 'INACTIVE';
   currentListing?: {
     id: string;
     title: string;
-    rent: number;
-  };
-  leaseStart?: string;
-  leaseEnd?: string;
-  rentStatus: 'PAID' | 'PENDING' | 'OVERDUE';
-  lastPayment?: string;
-  totalPaid: number;
+    address: string;
+  } | null;
+  recentBookings: {
+    id: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+    totalAmount: number;
+    listing: {
+      id: string;
+      title: string;
+      address: string;
+    };
+  }[];
 }
 
 interface MaintenanceRequest {
@@ -268,7 +279,11 @@ export default function LandlordDashboard() {
       }
       if (tenantsRes.ok) {
         const tenantsData = await tenantsRes.json();
-        setTenants(Array.isArray(tenantsData.data) ? tenantsData.data : []);
+        const tenantsList = Array.isArray(tenantsData.data) ? tenantsData.data : [];
+        console.log('Tenants data:', tenantsList); // Debug log
+        setTenants(tenantsList);
+      } else {
+        console.error('Failed to fetch tenants:', tenantsRes.status);
       }
       if (maintenanceRes.ok) {
         const maintenanceData = await maintenanceRes.json();
@@ -406,6 +421,55 @@ export default function LandlordDashboard() {
     }
   };
 
+  // Tenant management functions
+  const handleCallTenant = (phone: string, name: string) => {
+    if (phone) {
+      window.open(`tel:${phone}`, '_self');
+    } else {
+      addAlert('warning', `No phone number available for ${name}`);
+    }
+  };
+
+  const handleMessageTenant = async (tenantId: string, name: string) => {
+    try {
+      // Create or get existing chat thread
+      const response = await fetch('/api/chat/threads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          participantId: tenantId,
+          initialMessage: `Hello ${name}, I wanted to get in touch with you regarding your tenancy.`
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Navigate to the chat thread
+        window.open(`/chat/${data.data.threadId}`, '_blank');
+        addAlert('success', `Opening chat with ${name}...`);
+      } else {
+        addAlert('error', 'Failed to open chat. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error opening chat:', error);
+      addAlert('error', 'Failed to open chat. Please try again.');
+    }
+  };
+
+  const handleViewTenantDetails = (tenant: Tenant) => {
+    // Open tenant details modal or navigate to tenant profile
+    addAlert('info', `Viewing details for ${tenant.name}...`);
+    // TODO: Implement tenant details modal or page
+  };
+
+  const handleSendNotification = (tenantId: string, name: string) => {
+    const message = prompt(`Send notification to ${name}:`);
+    if (message) {
+      // TODO: Implement notification sending
+      addAlert('success', `Notification sent to ${name}`);
+    }
+  };
+
   // Utility functions
   const addAlert = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -538,7 +602,7 @@ export default function LandlordDashboard() {
                   <p className="text-purple-100 text-sm font-medium">Total Tenants</p>
                   <p className="text-3xl font-bold">{tenants.length}</p>
                   <p className="text-purple-100 text-xs mt-1">
-                    {tenants.filter(t => t.rentStatus === 'PAID').length} paid
+                    {tenants.filter(t => t.currentStatus === 'ACTIVE').length} active
                   </p>
                 </div>
                 <Users className="h-12 w-12 text-purple-200" />
@@ -902,47 +966,129 @@ export default function LandlordDashboard() {
             {Array.isArray(tenants) && tenants.map((tenant) => (
               <Card key={tenant.id}>
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-4">
-                    <Avatar className="h-16 w-16">
-                      <AvatarImage src={tenant.profilePicture} />
-                      <AvatarFallback>{tenant.name?.charAt(0) || 'T'}</AvatarFallback>
-                    </Avatar>
+                  <div className="flex flex-col lg:flex-row lg:items-start space-y-4 lg:space-y-0 lg:space-x-6">
+                    {/* Tenant Avatar and Basic Info */}
+                    <div className="flex items-center space-x-4">
+                      <Avatar className="h-16 w-16">
+                        <AvatarImage src={tenant.profilePicture} />
+                        <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
+                          {tenant.name?.charAt(0) || 'T'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">{tenant.name}</h3>
+                        <p className="text-sm text-gray-600 flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                          {tenant.email}
+                        </p>
+                        {tenant.phone && (
+                          <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
+                            <Phone className="h-3 w-3" />
+                            {tenant.phone}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          Joined: {new Date(tenant.joinedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Tenant Status and Stats */}
                     <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-lg font-semibold">{tenant.name}</h3>
-                          <p className="text-sm text-muted-foreground">{tenant.email}</p>
-                          {tenant.phone && (
-                            <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                              <Phone className="h-3 w-3" />
-                              {tenant.phone}
-                            </p>
-                          )}
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <p className="text-lg font-bold text-gray-900">{tenant.totalBookings}</p>
+                          <p className="text-xs text-gray-600">Total Bookings</p>
                         </div>
-                        <div className="text-right">
-                          <Badge className={tenant.rentStatus === 'PAID' ? 'bg-green-100 text-green-800' : tenant.rentStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}>
-                            {tenant.rentStatus}
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <p className="text-lg font-bold text-gray-900">{tenant.totalReviews}</p>
+                          <p className="text-xs text-gray-600">Reviews</p>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <Badge className={tenant.currentStatus === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                            {tenant.currentStatus}
                           </Badge>
-                          {tenant.currentListing && (
-                            <p className="text-sm font-medium mt-2">{tenant.currentListing.title}</p>
-                          )}
-                          <p className="text-lg font-bold mt-1">৳{tenant.totalPaid?.toLocaleString() || '0'}</p>
-                          <p className="text-xs text-muted-foreground">Total Paid</p>
+                          <p className="text-xs text-gray-600 mt-1">Status</p>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                          <p className="text-lg font-bold text-gray-900">{tenant.recentBookings.length}</p>
+                          <p className="text-xs text-gray-600">Recent Stays</p>
                         </div>
                       </div>
-                      <div className="flex gap-2 mt-4">
-                        <Button size="sm" variant="outline">
-                          <Phone className="h-4 w-4 mr-1" />
-                          Call
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <MessageCircle className="h-4 w-4 mr-1" />
-                          Message
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          View Details
-                        </Button>
-                      </div>
+
+                      {/* Current Listing Info */}
+                      {tenant.currentListing && (
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <h4 className="font-medium text-blue-900">Current Property</h4>
+                          <p className="text-sm text-blue-700">{tenant.currentListing.title}</p>
+                          <p className="text-xs text-blue-600">{tenant.currentListing.address}</p>
+                        </div>
+                      )}
+
+                      {/* Recent Bookings Summary */}
+                      {tenant.recentBookings.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="font-medium text-gray-900 mb-2">Recent Bookings</h4>
+                          <div className="space-y-2">
+                            {tenant.recentBookings.slice(0, 2).map((booking) => (
+                              <div key={booking.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
+                                <div>
+                                  <p className="font-medium">{booking.listing.title}</p>
+                                  <p className="text-gray-600">
+                                    {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-semibold">৳{booking.totalAmount.toLocaleString()}</p>
+                                  <Badge className={getStatusColor(booking.status)}>
+                                    {booking.status}
+                                  </Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-col gap-2 min-w-[140px]">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleCallTenant(tenant.phone || '', tenant.name)}
+                        className="w-full justify-start"
+                      >
+                        <Phone className="h-4 w-4 mr-2" />
+                        Call
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleMessageTenant(tenant.id, tenant.name)}
+                        className="w-full justify-start"
+                      >
+                        <MessageCircle className="h-4 w-4 mr-2" />
+                        Message
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleViewTenantDetails(tenant)}
+                        className="w-full justify-start"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Details
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleSendNotification(tenant.id, tenant.name)}
+                        className="w-full justify-start"
+                      >
+                        <Bell className="h-4 w-4 mr-2" />
+                        Notify
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

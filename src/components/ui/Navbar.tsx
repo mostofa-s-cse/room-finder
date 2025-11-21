@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
 import { type Session } from 'next-auth';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import {
   DropdownMenu,
@@ -68,60 +68,25 @@ interface User {
   name: string;
 }
 
-interface Participant {
-  id: string;
-  userId: string;
-  threadId: string;
-  role: string;
-  joinedAt: string;
-  lastSeenAt: string | null;
-  isOnline: boolean;
-  isMuted: boolean;
-  isBlocked: boolean;
-  user: User;
-}
 
-interface Message {
-  id: string;
-  threadId: string;
-  senderId: string;
-  content: string;
-  type: string;
-  status: string;
-  metadata: Record<string, unknown> | null;
-  replyToId: string | null;
-  createdAt: string;
-  updatedAt: string;
-  deliveredAt: string | null;
-  readAt: string | null;
-  editedAt: string | null;
-  sender: Participant;
-}
 
-interface Listing {
-  id: string;
-  title: string;
-}
+
+
+
 
 interface ChatThread {
   id: string;
-  type: string;
-  title: string | null;
-  description: string | null;
-  avatar: string | null;
-  listingId: string | null;
-  isActive: boolean;
-  isPinned: boolean;
-  isMuted: boolean;
-  lastMessageAt: string | null;
+  participantId: string;
+  participantName: string;
+  participantAvatar?: string;
+  participantRole: 'BACHELOR' | 'LANDLORD';
+  lastMessage: string;
+  lastMessageTime: string;
+  unreadCount: number;
+  listingId?: string;
+  listingTitle?: string;
   createdAt: string;
   updatedAt: string;
-  participants: Participant[];
-  messages: Message[];
-  listing: Listing | null;
-  _count: {
-    messages: number;
-  };
 }
 
 const navItems = [
@@ -334,34 +299,25 @@ const AuthButtons = ({
                         return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
                       };
                       
-                      // Get the other user (not the current session user)
-                      const currentUserId = session?.user?.id;
-                      const otherUser = thread.participants.find(p => p.userId !== currentUserId)?.user;
-                      const currentUserParticipant = thread.participants.find(p => p.userId === currentUserId);
-                      const lastMessage = thread.messages[thread.messages.length - 1];
-                      
-                      // Check if there are unread messages
-                      const hasUnreadMessages = lastMessage && currentUserParticipant && 
-                        lastMessage.sender.userId !== currentUserId && 
-                        (!currentUserParticipant.lastSeenAt || 
-                         new Date(lastMessage.createdAt) > new Date(currentUserParticipant.lastSeenAt));
+                      // Use the transformed thread data
+                      const hasUnreadMessages = thread.unreadCount > 0;
                       
                       return (
                         <Link key={thread.id} href={`/chat/${thread.id}`} className="block" onClick={() => setIsMessageOpen(false)}>
                           <div className="flex items-start space-x-3 p-2 hover:bg-accent rounded-lg cursor-pointer">
-                            <div className={`w-8 h-8 bg-gradient-to-br ${getAvatarColor(otherUser?.name || 'User')} rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0`}>
-                              {getInitials(otherUser?.name || 'U')}
+                            <div className={`w-8 h-8 bg-gradient-to-br ${getAvatarColor(thread.participantName)} rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0`}>
+                              {getInitials(thread.participantName)}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
-                                <p className="text-sm font-medium">{otherUser?.name || 'Unknown User'}</p>
+                                <p className="text-sm font-medium">{thread.participantName}</p>
                                 {hasUnreadMessages && (
                                   <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                                 )}
                               </div>
-                              <p className="text-xs text-muted-foreground">{thread.listing?.title || 'General Chat'}</p>
-                              <p className="text-xs text-muted-foreground line-clamp-1 mt-1">{lastMessage?.content || 'No messages yet'}</p>
-                              <p className="text-xs text-muted-foreground mt-1">{lastMessage ? formatTimeAgo(lastMessage.createdAt) : ''}</p>
+                              <p className="text-xs text-muted-foreground">{thread.listingTitle || 'General Chat'}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-1 mt-1">{thread.lastMessage}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{formatTimeAgo(thread.lastMessageTime)}</p>
                             </div>
                           </div>
                         </Link>
@@ -507,7 +463,8 @@ export function Navbar() {
   }, []);
 
   // Fetch notifications and messages
-  useEffect(() => {
+  // Function to fetch notifications and messages
+  const fetchData = useCallback(() => {
     if (session?.user) {
       // Fetch notifications
       fetch('/api/notifications')
@@ -526,26 +483,31 @@ export function Navbar() {
         .then(data => {
           if (data.data) {
             setMessages(data.data || []);
-            // Count threads with unread messages (using lastSeenAt logic)
-            const unreadCount = data.data?.filter((thread: ChatThread) => {
-              const currentUserId = session.user.id;
-              const currentUserParticipant = thread.participants.find(p => p.userId === currentUserId);
-              const lastMessage = thread.messages[thread.messages.length - 1];
-              
-              if (!lastMessage || !currentUserParticipant) return false;
-              
-              // Check if last message is from another user and not seen
-              return lastMessage.sender.userId !== currentUserId && 
-                     (!currentUserParticipant.lastSeenAt || 
-                      new Date(lastMessage.createdAt) > new Date(currentUserParticipant.lastSeenAt));
-            }).length || 0;
+            // Sum up unread counts from all threads
+            const totalUnreadCount = data.data?.reduce((total: number, thread: ChatThread) => {
+              return total + (thread.unreadCount || 0);
+            }, 0) || 0;
             
-            setMessageCount(unreadCount);
+            setMessageCount(totalUnreadCount);
           }
         })
         .catch(err => console.error('Failed to fetch messages:', err));
     }
   }, [session]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Listen for chat read updates to refresh unread counts
+  useEffect(() => {
+    const handleChatReadUpdate = () => {
+      fetchData();
+    };
+
+    window.addEventListener('chatReadUpdate', handleChatReadUpdate);
+    return () => window.removeEventListener('chatReadUpdate', handleChatReadUpdate);
+  }, [fetchData]);
 
   return (
     <nav className={cn(
