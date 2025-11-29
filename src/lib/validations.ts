@@ -33,12 +33,20 @@ export const listingSchema = z.object({
   price: z.number().min(1000, 'Price must be at least 1000 BDT').max(100000, 'Price must be less than 100,000 BDT'),
   city: z.string().min(2, 'City is required'),
   address: z.string().min(10, 'Address must be at least 10 characters'),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
   roomType: z.enum(['SINGLE', 'SHARED'], {
     message: 'Please select room type',
   }),
   amenities: z.array(z.string()).optional().default([]),
   images: z.array(z.string()).optional().default([]),
-  availableFrom: z.string().optional(),
+  availableFrom: z.string().optional().transform((val) => {
+    if (!val) return undefined;
+    // If it's already a proper date string, return it
+    if (val.includes('T')) return val;
+    // Convert date string to ISO format for database
+    return new Date(val).toISOString();
+  }),
   rules: z.array(z.string()).optional().default([]),
   contactPhone: z.string().optional(),
   contactEmail: z.string().email().optional().or(z.literal('')),

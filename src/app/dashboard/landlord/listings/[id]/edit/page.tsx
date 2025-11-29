@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useState, useRef, useEffect, use } from 'react';
+import { useState, useRef, use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,12 +20,14 @@ import {
   Check,
   Image as ImageIcon,
   ArrowLeft,
-  Save
+  Save,
+  Crosshair
 } from 'lucide-react';
 import Image from 'next/image';
 import { redirect } from 'next/navigation';
 import { toast } from 'sonner';
 import { ErrorDisplay, useApiError } from '@/components/common/ErrorDisplay';
+import AddressMapSelector from '@/components/maps/AddressMapSelector';
 
 interface ListingFormData {
   title: string;
@@ -33,8 +35,8 @@ interface ListingFormData {
   price: number;
   city: string;
   address: string;
-  latitude?: number;
-  longitude?: number;
+  lat?: number;
+  lng?: number;
   roomType: 'SINGLE' | 'SHARED' | '';
   availableFrom: string;
   images: string[];
@@ -88,16 +90,12 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
   const [step, setStep] = useState(1);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [cityInputValue, setCityInputValue] = useState('');
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+  const [filteredAreas, setFilteredAreas] = useState(DHAKA_AREAS);
   const { error: apiError, success: apiSuccess, handleError, handleSuccess, clearMessages } = useApiError();
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  if (status === 'loading') {
-    return <LoadingSpinner size="lg" text="Loading..." />;
-  }
-
-  if (!session || session.user.role !== 'LANDLORD') {
-    redirect('/auth/signin');
-  }
 
   // Fetch existing listing data
   useEffect(() => {
@@ -113,13 +111,19 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
             price: data.rent || data.price || 0,
             city: data.location || data.city || '',
             address: data.address || '',
+            lat: data.lat,
+            lng: data.lng,
             roomType: data.roomType || '',
-            availableFrom: data.availableFrom || '',
+            availableFrom: data.availableFrom ? new Date(data.availableFrom).toISOString().split('T')[0] : '',
             images: data.images || [],
             amenities: data.amenities || [],
             rules: data.rules || [],
+            contactPhone: data.contactPhone || '',
+            contactEmail: data.contactEmail || '',
             isAvailable: data.isAvailable ?? true
           });
+          // Set city input value for the dynamic selector
+          setCityInputValue(data.location || data.city || '');
         } else {
           handleError('Failed to load listing data');
         }
@@ -134,12 +138,160 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
     fetchListing();
   }, [id, handleError]);
 
+  if (status === 'loading') {
+    return <LoadingSpinner size="lg" text="Loading..." />;
+  }
+
+  if (!session || session.user.role !== 'LANDLORD') {
+    redirect('/auth/signin');
+  }
+
   const handleInputChange = (field: keyof ListingFormData, value: string | number | string[] | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
+  };
+
+  const handleCityInputChange = (value: string) => {
+    setCityInputValue(value);
+    handleInputChange('city', value);
+    
+    // Filter areas based on input
+    const filtered = DHAKA_AREAS.filter(area => 
+      area.toLowerCase().includes(value.toLowerCase())
+    );
+    setFilteredAreas(filtered);
+    setShowCitySuggestions(filtered.length > 0 && value.length > 0);
+  };
+
+  const selectCity = (city: string) => {
+    setCityInputValue(city);
+    handleInputChange('city', city);
+    setShowCitySuggestions(false);
+  };
+
+  const handleAddressSelect = (addressData: {
+    address: string;
+    latitude: number;
+    longitude: number;
+    city?: string;
+  }) => {
+    setFormData(prev => ({
+      ...prev,
+      address: addressData.address,
+      lat: addressData.latitude,
+      lng: addressData.longitude,
+      city: addressData.city || prev.city
+    }));
+    // Update city input value if city is detected from map
+    if (addressData.city) {
+      setCityInputValue(addressData.city);
+    }
+    // Clear any address-related errors
+    setErrors(prev => ({ 
+      ...prev, 
+      address: '', 
+      city: addressData.city ? '' : prev.city 
+    }));
+  };
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by this browser');
+      return;
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        
+        try {
+          // Reverse geocode to get address
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&limit=1`
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.display_name) {
+              const detectedAddress = data.display_name;
+              // Enhanced city detection from multiple address components
+              const detectedCity = data.address?.city || 
+                                 data.address?.town || 
+                                 data.address?.village || 
+                                 data.address?.suburb ||
+                                 data.address?.neighbourhood ||
+                                 data.address?.residential ||
+                                 '';
+              
+              handleAddressSelect({
+                address: detectedAddress,
+                latitude: lat,
+                longitude: lng,
+                city: detectedCity
+              });
+              
+              toast.success('Current location detected successfully!');
+            } else {
+              // If reverse geocoding fails, still save coordinates
+              setFormData(prev => ({
+                ...prev,
+                lat: lat,
+                lng: lng
+              }));
+              toast.success('Location coordinates saved! Please enter address manually.');
+            }
+          } else {
+            // If reverse geocoding fails, still save coordinates
+            setFormData(prev => ({
+              ...prev,
+              lat: lat,
+              lng: lng
+            }));
+            toast.success('Location coordinates saved! Please enter address manually.');
+          }
+        } catch (error) {
+          console.error('Reverse geocoding error:', error);
+          // Still save coordinates even if address lookup fails
+          setFormData(prev => ({
+            ...prev,
+            lat: lat,
+            lng: lng
+          }));
+          toast.success('Location coordinates saved! Please enter address manually.');
+        } finally {
+          setIsGettingLocation(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setIsGettingLocation(false);
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            toast.error('Location access denied. Please enable location permissions.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            toast.error('Location information is unavailable.');
+            break;
+          case error.TIMEOUT:
+            toast.error('Location request timed out.');
+            break;
+          default:
+            toast.error('An unknown error occurred while getting location.');
+            break;
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000
+      }
+    );
   };
 
   const toggleAmenity = (amenity: string) => {
@@ -175,12 +327,17 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
       newErrors.price = 'Valid monthly rent is required';
     }
 
+    // For existing listings, we don't require coordinates, but if they exist, validate the populated fields
     if (!formData.city.trim()) {
       newErrors.city = 'City is required';
+    } else if (formData.city.trim().length < 2) {
+      newErrors.city = 'City/Area must be at least 2 characters';
     }
 
     if (!formData.address.trim()) {
       newErrors.address = 'Address is required';
+    } else if (formData.address.trim().length < 10) {
+      newErrors.address = 'Address must be at least 10 characters';
     }
 
     if (!formData.roomType) {
@@ -258,11 +415,15 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
           price: Number(formData.price),
           city: formData.city.trim(),
           address: formData.address.trim(),
+          lat: formData.lat,
+          lng: formData.lng,
           roomType: formData.roomType,
-          availableFrom: formData.availableFrom || undefined,
+          availableFrom: formData.availableFrom?.trim() || undefined,
           images: formData.images || [],
           amenities: formData.amenities || [],
-          rules: formData.rules || []
+          rules: formData.rules || [],
+          contactPhone: formData.contactPhone?.trim() || undefined,
+          contactEmail: formData.contactEmail?.trim() || undefined
         }),
       });
 
@@ -397,6 +558,52 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="availableFrom">Available From</Label>
+                  <Input
+                    id="availableFrom"
+                    type="date"
+                    value={formData.availableFrom}
+                    onChange={(e) => handleInputChange('availableFrom', e.target.value)}
+                    className={errors.availableFrom ? 'border-red-500' : ''}
+                  />
+                  {errors.availableFrom && <p className="text-red-500 text-sm">{errors.availableFrom}</p>}
+                  <p className="text-xs text-muted-foreground">
+                    When will this room be available for rent?
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="contactPhone">Contact Phone (Optional)</Label>
+                  <Input
+                    id="contactPhone"
+                    value={formData.contactPhone || ''}
+                    onChange={(e) => handleInputChange('contactPhone', e.target.value)}
+                    placeholder="+880 1700-000000"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Alternative contact number for this listing
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="contactEmail">Contact Email (Optional)</Label>
+                <Input
+                  id="contactEmail"
+                  type="email"
+                  value={formData.contactEmail || ''}
+                  onChange={(e) => handleInputChange('contactEmail', e.target.value)}
+                  placeholder="your.email@example.com"
+                  className={errors.contactEmail ? 'border-red-500' : ''}
+                />
+                {errors.contactEmail && <p className="text-red-500 text-sm">{errors.contactEmail}</p>}
+                <p className="text-xs text-muted-foreground">
+                  Alternative email for inquiries about this listing
+                </p>
+              </div>
+
               <div className="flex items-center space-x-2">
                 <Switch
                   checked={formData.isAvailable}
@@ -412,38 +619,162 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
             <CardHeader>
               <CardTitle>Location Details</CardTitle>
               <CardDescription>
-                Provide location information
+                Update location information. Use the map to ensure accurate coordinates.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="city">Area/City *</Label>
-                <Select 
-                  value={formData.city} 
-                  onValueChange={(value) => handleInputChange('city', value)}
-                >
-                  <SelectTrigger className={errors.city ? 'border-red-500' : ''}>
-                    <SelectValue placeholder="Select area" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DHAKA_AREAS.map(area => (
-                      <SelectItem key={area} value={area}>{area}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.city && <p className="text-red-500 text-sm">{errors.city}</p>}
+              <div className="space-y-2 relative">
+                <Label htmlFor="city">City/Area * {formData.lat && formData.lng && '(From Map)'}</Label>
+                <div className="relative">
+                  <Input
+                    id="city"
+                    value={cityInputValue || formData.city}
+                    onChange={(e) => {
+                      // Only allow changes if no coordinates are set
+                      if (!formData.lat || !formData.lng) {
+                        handleCityInputChange(e.target.value);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (!formData.lat || !formData.lng) {
+                        if (filteredAreas.length > 0 && cityInputValue.length > 0) {
+                          setShowCitySuggestions(true);
+                        }
+                      }
+                    }}
+                    onBlur={() => {
+                      // Delay hiding suggestions to allow clicking
+                      setTimeout(() => setShowCitySuggestions(false), 150);
+                    }}
+                    placeholder={formData.lat && formData.lng ? 'City detected from map selection' : 'Type or select area'}
+                    className={`${errors.city ? 'border-red-500' : ''} ${formData.lat && formData.lng ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                    readOnly={!!(formData.lat && formData.lng)}
+                  />
+                  {showCitySuggestions && filteredAreas.length > 0 && !formData.lat && !formData.lng && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                      {filteredAreas.map((area) => (
+                        <button
+                          key={area}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none text-sm border-b border-gray-100 last:border-b-0"
+                          onMouseDown={(e) => {
+                            e.preventDefault(); // Prevent onBlur from firing
+                            selectCity(area);
+                          }}
+                        >
+                          {area}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {formData.lat && formData.lng ? 
+                    '📍 City automatically detected from map selection' : 
+                    '💡 Use map below to select location or type manually'
+                  }
+                </p>
+                {errors.city && (
+                  <p className="text-sm text-red-500">{errors.city}</p>
+                )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="address">Full Address *</Label>
-                <Input
+                <Label htmlFor="address">Full Address * {formData.lat && formData.lng && '(From Map)'}</Label>
+                <Textarea
                   id="address"
                   value={formData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  placeholder="House/Building number, Street, Area"
-                  className={errors.address ? 'border-red-500' : ''}
+                  onChange={(e) => {
+                    // Only allow changes if no coordinates are set
+                    if (!formData.lat || !formData.lng) {
+                      handleInputChange('address', e.target.value);
+                    }
+                  }}
+                  placeholder={formData.lat && formData.lng ? 'Address automatically detected from map' : 'Type address or use map below'}
+                  rows={formData.address ? 3 : 2}
+                  className={`${errors.address ? 'border-red-500' : formData.address.length > 0 && formData.address.length < 10 ? 'border-yellow-500' : ''} ${formData.lat && formData.lng ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                  readOnly={!!(formData.lat && formData.lng)}
                 />
+                <p className={`text-xs ${
+                  formData.lat && formData.lng ? 'text-green-600' :
+                  formData.address.length >= 10 ? 'text-green-600' : 
+                  formData.address.length > 0 ? 'text-yellow-600' : 
+                  'text-muted-foreground'
+                }`}>
+                  {formData.lat && formData.lng ? 
+                    `📍 Address detected from map (${formData.address.length} characters) ✓` :
+                    `${formData.address.length}/10+ characters ${formData.address.length >= 10 ? '✓' : formData.address.length > 0 ? '(need more)' : ''}`
+                  }
+                </p>
                 {errors.address && <p className="text-red-500 text-sm">{errors.address}</p>}
+              </div>
+
+              {/* Map Selector */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">📍 Update Location on Map (Optional)</Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={getCurrentLocation}
+                      disabled={isGettingLocation}
+                      className="flex items-center gap-2"
+                    >
+                      {isGettingLocation ? (
+                        <LoadingSpinner size="sm" />
+                      ) : (
+                        <Crosshair className="h-4 w-4" />
+                      )}
+                      {isGettingLocation ? 'Getting...' : 'Use My Location'}
+                    </Button>
+                    {formData.lat && formData.lng && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setFormData(prev => ({ 
+                            ...prev, 
+                            latitude: undefined, 
+                            longitude: undefined
+                          }));
+                        }}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        Clear Coordinates
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <div className="border-2 border-dashed border-blue-200 rounded-lg p-1">
+                  <AddressMapSelector
+                    onAddressSelect={handleAddressSelect}
+                    initialAddress={formData.address}
+                    initialLatitude={formData.lat}
+                    initialLongitude={formData.lng}
+                  />
+                </div>
+                {formData.lat && formData.lng ? (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm font-medium text-green-700 mb-1">
+                      ✅ Location Coordinates Available
+                    </p>
+                    <p className="text-xs text-green-600">
+                      📍 Coordinates: {formData.lat.toFixed(6)}, {formData.lng.toFixed(6)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm font-medium text-blue-700 mb-1">
+                      ℹ️ No Coordinates Set
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      Use the map above to set precise location coordinates for better search visibility.
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

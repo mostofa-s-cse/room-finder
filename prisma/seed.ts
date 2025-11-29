@@ -41,7 +41,8 @@ const DHAKA_AREAS = [
   { name: 'Old Dhaka', lat: 23.7104, lng: 90.4074 },
   { name: 'Mohammadpur', lat: 23.765, lng: 90.356 },
   { name: 'Bashundhara', lat: 23.8103, lng: 90.4125 },
-  { name: 'Tejgaon', lat: 23.7639, lng: 90.3889 }
+  { name: 'Tejgaon', lat: 23.7639, lng: 90.3889 },
+  { name: 'Nikunja', lat: 23.8315, lng: 90.4196 }
 ];
 
 const SAMPLE_LISTINGS = [
@@ -206,20 +207,24 @@ async function main() {
     const area = DHAKA_AREAS[i % DHAKA_AREAS.length];
     const landlord = landlords[i % landlords.length];
     
-    // Add some randomization to coordinates
-    const lat = area.lat + (Math.random() - 0.5) * 0.01;
-    const lng = area.lng + (Math.random() - 0.5) * 0.01;
+    // Add some randomization to coordinates (smaller range for more realistic positioning)
+    const lat = area.lat + (Math.random() - 0.5) * 0.005;
+    const lng = area.lng + (Math.random() - 0.5) * 0.005;
     
     // Generate availableFrom date (1-30 days from now)
     const availableFrom = new Date();
     availableFrom.setDate(availableFrom.getDate() + Math.floor(Math.random() * 30) + 1);
+    
+    const addressStr = `${Math.floor(Math.random() * 99) + 1}/${Math.floor(Math.random() * 9) + 1}, ${area.name}, Dhaka`;
+    
+    console.log(`Creating listing: ${sample.title} at (${lat.toFixed(6)}, ${lng.toFixed(6)}) - ${addressStr}`);
     
     const listing = await prisma.listing.create({
       data: {
         ...sample,
         landlordId: landlord.id,
         city: 'Dhaka',
-        address: `${Math.floor(Math.random() * 99) + 1}/${Math.floor(Math.random() * 9) + 1}, ${area.name}, Dhaka`,
+        address: addressStr,
         lat,
         lng,
         amenities: sample.amenities,
@@ -241,8 +246,8 @@ async function main() {
     const landlord = landlords[Math.floor(Math.random() * landlords.length)];
     const sampleListing = SAMPLE_LISTINGS[Math.floor(Math.random() * SAMPLE_LISTINGS.length)];
     
-    const lat = area.lat + (Math.random() - 0.5) * 0.02;
-    const lng = area.lng + (Math.random() - 0.5) * 0.02;
+    const lat = area.lat + (Math.random() - 0.5) * 0.01;
+    const lng = area.lng + (Math.random() - 0.5) * 0.01;
     
     const randomAmenities = SAMPLE_AMENITIES
       .sort(() => 0.5 - Math.random())
@@ -259,13 +264,15 @@ async function main() {
     const availableFrom = new Date();
     availableFrom.setDate(availableFrom.getDate() + Math.floor(Math.random() * 45) + 1);
     
+    const addressStr = `${Math.floor(Math.random() * 99) + 1}/${Math.floor(Math.random() * 9) + 1}, ${area.name}, Dhaka`;
+    
     const listing = await prisma.listing.create({
       data: {
         title: `${Math.random() > 0.5 ? 'Beautiful' : 'Comfortable'} ${sampleListing.roomType === RoomType.SINGLE ? 'Single' : 'Shared'} Room in ${area.name}`,
         description: `${sampleListing.description} Located in ${area.name}, this is a great choice for ${sampleListing.roomType === RoomType.SINGLE ? 'professionals' : 'students'}.`,
         price: adjustedPrice,
         city: 'Dhaka',
-        address: `${Math.floor(Math.random() * 99) + 1}/${Math.floor(Math.random() * 9) + 1}, ${area.name}, Dhaka`,
+        address: addressStr,
         lat,
         lng,
         roomType: sampleListing.roomType,
@@ -279,7 +286,37 @@ async function main() {
       }
     });
     
+    console.log(`Created additional listing: ${listing.title} at (${lat.toFixed(6)}, ${lng.toFixed(6)}) - ${addressStr}`);
+    
     listings.push(listing);
+  }
+
+  // Create a specific listing for Nikunja area to test coordinates
+  console.log('🏘️ Creating specific Nikunja listing for testing...');
+  const nikunjaArea = DHAKA_AREAS.find(area => area.name === 'Nikunja');
+  if (nikunjaArea) {
+    const nikunjaListing = await prisma.listing.create({
+      data: {
+        title: 'Test Room in Nikunja 1',
+        description: 'A test listing in Nikunja area with proper coordinates for debugging.',
+        price: 15000,
+        city: 'Dhaka',
+        address: 'Nikunja 1, Tanpara, Joar Sahara, Dhaka, Dhaka Metropolitan, Dhaka District, Dhaka Division, 1229, Bangladesh',
+        lat: nikunjaArea.lat,
+        lng: nikunjaArea.lng,
+        roomType: RoomType.SINGLE,
+        amenities: ['WiFi', 'AC', 'Kitchen', 'Security'],
+        rules: ['No smoking', 'Clean common areas'],
+        availableFrom: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+        contactPhone: '+8801700000999',
+        contactEmail: 'test.nikunja@example.com',
+        landlordId: landlords[0].id,
+        images: ['/images/default-room.svg']
+      }
+    });
+    
+    console.log(`Created Nikunja test listing with coordinates: (${nikunjaArea.lat}, ${nikunjaArea.lng})`);
+    listings.push(nikunjaListing);
   }
 
   // Create Sample Reviews

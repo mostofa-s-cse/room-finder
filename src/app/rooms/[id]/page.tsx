@@ -10,7 +10,23 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RatingStars } from '@/components/ui/RatingStars';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { AmenitiesSelector } from '@/components/ui/AmenitiesSelector';
-import { MapComponent } from '@/components/ui/MapComponent';
+import dynamic from 'next/dynamic';
+
+// Dynamic import for LeafletMap to avoid SSR issues
+const LeafletMapDisplay = dynamic(
+  () => import('@/components/maps/LeafletMap'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+          <p className="text-sm text-gray-600">Loading map...</p>
+        </div>
+      </div>
+    )
+  }
+);
 import { Separator } from '@/components/ui/separator';
 import { 
   MapPin, 
@@ -37,8 +53,8 @@ interface Listing {
   price: number;
   city: string;
   address: string;
-  lat: number;
-  lng: number;
+  lat?: number;
+  lng?: number;
   roomType: string;
   images: string[];
   amenities: string[];
@@ -80,6 +96,46 @@ export default function RoomDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isBooking, setIsBooking] = useState(false);
+
+  // Check if room is available based on date and listing status
+  const isRoomAvailable = () => {
+    if (!listing) return false;
+    
+    // Check if listing is marked as available
+    if (listing.isAvailable === false) return false;
+    
+    // Check if availableFrom date has passed
+    if (listing.availableFrom) {
+      const availableDate = new Date(listing.availableFrom);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time to compare only dates
+      availableDate.setHours(0, 0, 0, 0);
+      
+      return availableDate <= today;
+    }
+    
+    // If no availableFrom date, consider available if isAvailable is true
+    return listing.isAvailable;
+  };
+
+  const getAvailabilityMessage = () => {
+    if (!listing) return 'Not Available';
+    
+    if (listing.isAvailable === false) return 'Not Available';
+    
+    if (listing.availableFrom) {
+      const availableDate = new Date(listing.availableFrom);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      availableDate.setHours(0, 0, 0, 0);
+      
+      if (availableDate > today) {
+        return `Available from ${availableDate.toLocaleDateString()}`;
+      }
+    }
+    
+    return 'Book Now';
+  };
 
   useEffect(() => {
     const fetchListing = async () => {
@@ -311,8 +367,8 @@ export default function RoomDetailsPage() {
                 
                 <div className="flex flex-wrap gap-2 mt-4">
                   <Badge variant="secondary">{listing.roomType}</Badge>
-                  <Badge variant={listing.isAvailable ? "default" : "destructive"}>
-                    {listing.isAvailable ? "Available" : "Not Available"}
+                  <Badge variant={isRoomAvailable() ? "default" : "destructive"}>
+                    {isRoomAvailable() ? "Available" : getAvailabilityMessage()}
                   </Badge>
                 </div>
               </CardHeader>
@@ -368,18 +424,26 @@ export default function RoomDetailsPage() {
                 <CardDescription>{listing.address}, {listing.city}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-64 rounded-lg overflow-hidden">
-                  <MapComponent
-                    center={{ lat: listing.lat, lng: listing.lng }}
-                    markers={[{
-                      id: listing.id,
-                      position: { lat: listing.lat, lng: listing.lng },
-                      title: listing.title,
-                      data: { price: listing.price },
-                    }]}
-                    zoom={15}
-                  />
-                </div>
+                {listing.lat && listing.lng ? (
+                  <div className="h-64 rounded-lg overflow-hidden">
+                    <LeafletMapDisplay
+                      position={[listing.lat, listing.lng]}
+                      defaultCenter={[listing.lat, listing.lng]}
+                      address={`${listing.title} - ${listing.address}, ${listing.city}`}
+                      onLocationSelect={() => {}} // Read-only map, no interaction needed
+                    />
+                  </div>
+                ) : (
+                  <div className="h-64 rounded-lg bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300">
+                    <div className="text-center">
+                      <MapPin className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-600 font-medium">Location coordinates not available</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Address: {listing.address}, {listing.city}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -425,16 +489,17 @@ export default function RoomDetailsPage() {
               <CardHeader>
                 <CardTitle className="text-lg">Book This Room</CardTitle>
                 <CardDescription>
-                  Security Deposit: ৳{listing.securityDeposit ? listing.securityDeposit.toLocaleString() : 'Contact for details'}
+                  Security Deposit: {listing.securityDeposit ? `৳${listing.securityDeposit.toLocaleString()}` : 'Contact for details'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
                   <Button 
                     onClick={handleBooking}
-                    disabled={!listing.isAvailable || isBooking}
+                    disabled={!isRoomAvailable() || isBooking}
                     className="w-full"
                     size="lg"
+                    variant={!isRoomAvailable() ? "secondary" : "default"}
                   >
                     {isBooking ? (
                       <>
@@ -444,7 +509,7 @@ export default function RoomDetailsPage() {
                     ) : (
                       <>
                         <Calendar className="mr-2 h-4 w-4" />
-                        {listing.isAvailable ? 'Book Now' : 'Not Available'}
+                        {getAvailabilityMessage()}
                       </>
                     )}
                   </Button>

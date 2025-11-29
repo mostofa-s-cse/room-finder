@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  url      = env("DATABASE_URL")
+  url=env("DATABASE_URL")
 }
 
 model User {
@@ -62,8 +62,8 @@ model Listing {
   city              String
   address           String
   location          String?
-  lat               Float
-  lng               Float
+  lat               Float?
+  lng               Float?
   roomType          RoomType           @default(SINGLE)
   amenities         Json             @default("[]")
   images            Json             @default("[]")

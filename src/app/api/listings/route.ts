@@ -21,9 +21,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const where: Prisma.ListingWhereInput = {
     isPublished: true,
-    ...(city && { city: { contains: city, mode: 'insensitive' } }),
-    ...(maxPrice && { price: { ...{}, lte: maxPrice } }),
-    ...(minPrice && { price: { ...{ lte: maxPrice }, gte: minPrice } }),
+    ...(city && { city: { contains: city } }),
+    ...(maxPrice && { price: { lte: maxPrice } }),
+    ...(minPrice && { price: { gte: minPrice, ...(maxPrice && { lte: maxPrice }) } }),
     ...(roomType && { roomType }),
     // Note: JSON array filtering would need custom logic or database-specific queries
     // For now, we'll filter amenities in application logic after fetching
@@ -98,8 +98,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       ...listingData,
       availableFrom: availableFromDate,
       landlordId: session.user.id,
-      lat: 0, // TODO: Calculate from address
-      lng: 0, // TODO: Calculate from address
+      lat: listingData.lat || null,
+      lng: listingData.lng || null,
     },
     include: {
       landlord: {
