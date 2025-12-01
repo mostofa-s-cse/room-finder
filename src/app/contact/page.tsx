@@ -8,7 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle } from 'lucide-react';
+import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { contactSchema, type ContactInput } from '@/lib/validations';
+import { toast } from 'react-hot-toast';
 
 interface ContactForm {
   name: string;
@@ -28,6 +30,8 @@ export default function ContactPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const handleInputChange = (field: keyof ContactForm, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -36,24 +40,75 @@ export default function ContactPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError(null);
+    setValidationErrors({});
     
-    // Simulate form submission
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    setSubmitted(true);
-    setIsSubmitting(false);
-    
-    // Reset form after 3 seconds
-    setTimeout(() => {
-      setSubmitted(false);
-      setFormData({
-        name: '',
-        email: '',
-        subject: '',
-        category: '',
-        message: '',
+    try {
+      // Validate form data
+      const validatedData = contactSchema.parse(formData);
+      
+      // Submit to API
+      const response = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(validatedData),
       });
-    }, 3000);
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send message');
+      }
+      
+      // Success
+      setSubmitted(true);
+      toast.success('Message sent successfully!');
+      
+      // Reset form after 5 seconds
+      setTimeout(() => {
+        setSubmitted(false);
+        setFormData({
+          name: '',
+          email: '',
+          subject: '',
+          category: '',
+          message: '',
+        });
+      }, 5000);
+      
+    } catch (err) {
+      console.error('Contact form error:', err);
+      
+      if (err instanceof Error) {
+        // Check if it's a validation error
+        if (err.message.includes('validation')) {
+          try {
+            const validationResult = contactSchema.safeParse(formData);
+            if (!validationResult.success) {
+              const errors: Record<string, string> = {};
+              validationResult.error.issues.forEach((error) => {
+                if (error.path[0]) {
+                  errors[error.path[0].toString()] = error.message;
+                }
+              });
+              setValidationErrors(errors);
+            }
+          } catch {
+            setError('Please check your input and try again.');
+          }
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('Failed to send message. Please try again later.');
+      }
+      
+      toast.error('Failed to send message. Please check your input and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -163,6 +218,24 @@ export default function ContactPage() {
                     </AlertDescription>
                   </Alert>
                 ) : (
+                  <>
+                    {error && (
+                      <Alert className="mb-6 border-red-200 bg-red-50">
+                        <AlertCircle className="h-4 w-4 text-red-600" />
+                        <AlertDescription className="text-red-800">
+                          {error}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    
+                    {Object.keys(validationErrors).length > 0 && (
+                      <Alert className="mb-6 border-yellow-200 bg-yellow-50">
+                        <AlertCircle className="h-4 w-4 text-yellow-600" />
+                        <AlertDescription className="text-yellow-800">
+                          Please correct the errors below and try again.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
@@ -172,8 +245,12 @@ export default function ContactPage() {
                           value={formData.name}
                           onChange={(e) => handleInputChange('name', e.target.value)}
                           placeholder="Your full name"
+                          className={validationErrors.name ? 'border-red-500' : ''}
                           required
                         />
+                        {validationErrors.name && (
+                          <p className="text-red-500 text-sm">{validationErrors.name}</p>
+                        )}
                       </div>
 
                       <div className="space-y-2">
@@ -184,8 +261,12 @@ export default function ContactPage() {
                           value={formData.email}
                           onChange={(e) => handleInputChange('email', e.target.value)}
                           placeholder="your.email@example.com"
+                          className={validationErrors.email ? 'border-red-500' : ''}
                           required
                         />
+                        {validationErrors.email && (
+                          <p className="text-red-500 text-sm">{validationErrors.email}</p>
+                        )}
                       </div>
                     </div>
 
@@ -214,8 +295,12 @@ export default function ContactPage() {
                           value={formData.subject}
                           onChange={(e) => handleInputChange('subject', e.target.value)}
                           placeholder="Brief subject of your message"
+                          className={validationErrors.subject ? 'border-red-500' : ''}
                           required
                         />
+                        {validationErrors.subject && (
+                          <p className="text-red-500 text-sm">{validationErrors.subject}</p>
+                        )}
                       </div>
                     </div>
 
@@ -227,8 +312,15 @@ export default function ContactPage() {
                         onChange={(e) => handleInputChange('message', e.target.value)}
                         placeholder="Tell us more about your inquiry..."
                         rows={6}
+                        className={validationErrors.message ? 'border-red-500' : ''}
                         required
                       />
+                      {validationErrors.message && (
+                        <p className="text-red-500 text-sm">{validationErrors.message}</p>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        {formData.message.length}/2000 characters
+                      </p>
                     </div>
 
                     <Button 
@@ -250,6 +342,7 @@ export default function ContactPage() {
                       )}
                     </Button>
                   </form>
+                  </>
                 )}
               </CardContent>
             </Card>

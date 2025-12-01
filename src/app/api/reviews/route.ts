@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withErrorHandling, successResponse, requireAuth, ApiErrorClass, getPaginationParams, paginatedResponse } from '@/lib/api-utils';
+import { withErrorHandling, successResponse, requireAuth, ApiErrorClass, getPaginationParams, paginatedSuccessResponse } from '@/lib/api-utils';
 import { reviewSchema } from '@/lib/validations';
 import { UserRole, Prisma } from '@prisma/client';
 

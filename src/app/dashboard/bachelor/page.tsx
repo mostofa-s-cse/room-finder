@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +21,8 @@ import {
   Edit,
   Search,
   Filter,
-  Bell
+  Bell,
+  Building2
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -32,8 +33,9 @@ interface Listing {
   id: string;
   title: string;
   description: string;
-  rent: number;
-  location: string;
+  price?: number;
+  city?: string;
+  address?: string;
   images: string[];
   amenities: string[];
   roomType: 'SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT';
@@ -46,6 +48,9 @@ interface Listing {
   };
   createdAt: string;
   matchScore?: number; // Custom property for dashboard
+  // Backward compatibility
+  rent?: number;
+  location?: string;
 }
 
 interface BachelorProfile {
@@ -122,7 +127,34 @@ interface ChatThread {
   listingTitle?: string;
 }
 
-export default function BachelorDashboard() {
+interface TenantRequest {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'EXPIRED';
+  message: string;
+  moveInDate: string;
+  duration: string;
+  budget: number;
+  profession?: string;
+  company?: string;
+  monthlyIncome?: number;
+  landlordResponse?: string;
+  respondedAt?: string;
+  createdAt: string;
+  listing: {
+    id: string;
+    title: string;
+    address: string;
+    price: number;
+    images: string[];
+  };
+  landlord: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+function BachelorDashboardContent() {
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState<BachelorProfile | null>(null);
@@ -130,6 +162,7 @@ export default function BachelorDashboard() {
   const [favorites, setFavorites] = useState<Listing[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
+  const [tenantRequests, setTenantRequests] = useState<TenantRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -159,11 +192,12 @@ export default function BachelorDashboard() {
   const fetchDashboardData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [profileRes, recommendationsRes, favoritesRes, bookingsRes] = await Promise.all([
+      const [profileRes, recommendationsRes, favoritesRes, bookingsRes, requestsRes] = await Promise.all([
         fetch('/api/users/profile'),
         fetch('/api/listings/recommendations'),
         fetch('/api/users/favorites'),
-        fetch('/api/bookings')
+        fetch('/api/bookings'),
+        fetch('/api/tenant-requests')
       ]);
 
       if (profileRes.ok) {
@@ -184,7 +218,11 @@ export default function BachelorDashboard() {
       if (favoritesRes.ok) {
         const favoritesResponse = await favoritesRes.json();
         const favoritesData = favoritesResponse.data || favoritesResponse;
-        setFavorites(Array.isArray(favoritesData) ? favoritesData : []);
+        // Extract listing data from favorites API response
+        const extractedListings = Array.isArray(favoritesData) 
+          ? favoritesData.map((fav: any) => fav.listing || fav).filter(Boolean)
+          : [];
+        setFavorites(extractedListings);
       } else {
         console.error('Failed to fetch favorites');
         setFavorites([]);
@@ -196,6 +234,14 @@ export default function BachelorDashboard() {
       } else {
         console.error('Failed to fetch bookings');
         setBookings([]);
+      }
+      if (requestsRes.ok) {
+        const requestsResponse = await requestsRes.json();
+        const requestsData = requestsResponse.data?.requests || requestsResponse.requests || [];
+        setTenantRequests(Array.isArray(requestsData) ? requestsData : []);
+      } else {
+        console.error('Failed to fetch tenant requests');
+        setTenantRequests([]);
       }
       // Fetch real chat threads data
       try {
@@ -233,7 +279,7 @@ export default function BachelorDashboard() {
 
     // Check for tab parameter in URL
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['overview', 'recommendations', 'favorites', 'bookings', 'chats'].includes(tabParam)) {
+    if (tabParam && ['overview', 'recommendations', 'favorites', 'bookings', 'requests', 'chats'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [session, status, searchParams, fetchDashboardData]);
@@ -330,11 +376,12 @@ export default function BachelorDashboard() {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
           <TabsTrigger value="favorites">Favorites</TabsTrigger>
           <TabsTrigger value="bookings">Bookings</TabsTrigger>
+          <TabsTrigger value="requests">Requests</TabsTrigger>
           <TabsTrigger value="chats">Messages</TabsTrigger>
         </TabsList>
 
@@ -463,10 +510,10 @@ export default function BachelorDashboard() {
                     </div>
                     <div className="flex items-center gap-2 mb-2">
                       <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground line-clamp-1">{listing.location}</span>
+                      <span className="text-sm text-muted-foreground line-clamp-1">{listing.location || listing.address || listing.city}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-lg">৳{listing.rent?.toLocaleString()}</span>
+                      <span className="font-semibold text-lg">৳{(listing.price || listing.rent)?.toLocaleString()}</span>
                       <Link href={`/listings/${listing.id}`}>
                         <Button size="sm" variant="outline">
                           View Details
@@ -539,7 +586,17 @@ export default function BachelorDashboard() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Array.isArray(favorites) && favorites.map((listing: Listing) => (
-              <ListingCard key={listing.id} listing={listing} />
+              <ListingCard 
+                key={listing.id} 
+                listing={listing} 
+                isFavorited={true}
+                onFavoriteChange={(listingId, isFavorited) => {
+                  if (!isFavorited) {
+                    // Remove from favorites list when unfavorited
+                    setFavorites(prev => prev.filter(fav => fav.id !== listingId));
+                  }
+                }}
+              />
             ))}
             {(!Array.isArray(favorites) || favorites.length === 0) && (
               <div className="col-span-full text-center py-12">
@@ -631,6 +688,136 @@ export default function BachelorDashboard() {
           </div>
         </TabsContent>
 
+        {/* Requests Tab */}
+        <TabsContent value="requests" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Tenant Requests</h2>
+              <p className="text-muted-foreground">Your rental applications and their status</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {Array.isArray(tenantRequests) && tenantRequests.map((request) => (
+              <Card key={request.id}>
+                <CardContent className="p-6">
+                  <div className="flex flex-col md:flex-row md:items-start gap-6">
+                    <div className="flex items-center space-x-4 flex-1">
+                      {request.listing.images.length > 0 && (
+                        <Image
+                          src={request.listing.images[0]}
+                          alt={request.listing.title}
+                          width={80}
+                          height={80}
+                          className="w-20 h-20 rounded-lg object-cover"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg">{request.listing.title}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          <MapPin className="h-4 w-4 inline mr-1" />
+                          {request.listing.address}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Landlord: {request.landlord.name}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge className={
+                            request.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                            request.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                            request.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                            request.status === 'WITHDRAWN' ? 'bg-gray-100 text-gray-800' :
+                            'bg-orange-100 text-orange-800'
+                          }>
+                            {request.status}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            Applied {new Date(request.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col gap-3 md:text-right">
+                      <div>
+                        <p className="text-lg font-semibold">৳{request.budget.toLocaleString()}/month</p>
+                        <p className="text-sm text-muted-foreground">
+                          Move-in: {new Date(request.moveInDate).toLocaleDateString()}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Duration: {request.duration.replace('_', ' ')}
+                        </p>
+                      </div>
+                      
+                      {request.landlordResponse && (
+                        <div className="bg-muted p-3 rounded-lg max-w-md">
+                          <p className="text-sm font-medium">Landlord Response:</p>
+                          <p className="text-sm text-muted-foreground mt-1">{request.landlordResponse}</p>
+                          {request.respondedAt && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(request.respondedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
+                      <div className="flex gap-2">
+                        <Link href={`/rooms/${request.listing.id}`}>
+                          <Button size="sm" variant="outline">
+                            View Room
+                          </Button>
+                        </Link>
+                        {request.status === 'PENDING' && (
+                          <Button 
+                            size="sm" 
+                            variant="destructive"
+                            onClick={async () => {
+                              if (confirm('Are you sure you want to withdraw this request?')) {
+                                try {
+                                  const response = await fetch(`/api/tenant-requests/${request.id}`, {
+                                    method: 'DELETE',
+                                  });
+                                  if (response.ok) {
+                                    setTenantRequests(prev => 
+                                      prev.map(r => r.id === request.id ? { ...r, status: 'WITHDRAWN' } : r)
+                                    );
+                                  }
+                                } catch (error) {
+                                  console.error('Failed to withdraw request:', error);
+                                }
+                              }
+                            }}
+                          >
+                            Withdraw
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t">
+                    <h4 className="font-medium mb-2">Your Application Message:</h4>
+                    <p className="text-sm text-muted-foreground">{request.message}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            {(!Array.isArray(tenantRequests) || tenantRequests.length === 0) && (
+              <div className="text-center py-12">
+                <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No tenant requests yet.</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Apply to listings to start building your rental history.
+                </p>
+                <Link href="/search">
+                  <Button className="mt-4">
+                    Browse Listings
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
         {/* Messages Tab */}
         <TabsContent value="chats" className="space-y-4">
           <div className="flex justify-between items-center">
@@ -689,5 +876,17 @@ export default function BachelorDashboard() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function BachelorDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="container mx-auto py-8">
+        <LoadingSpinner size="lg" text="Loading dashboard..." />
+      </div>
+    }>
+      <BachelorDashboardContent />
+    </Suspense>
   );
 }

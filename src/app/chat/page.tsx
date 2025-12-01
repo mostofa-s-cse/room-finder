@@ -124,36 +124,38 @@ export default function ChatListPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="container mx-auto py-6 space-y-6">
         {/* Header */}
-        <Card className="border-0 shadow-lg bg-white">
-          <CardHeader>
+        <Card className="border-0 shadow-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+          <CardHeader className="pb-8">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-4">
                 <Link href={`/dashboard/${session?.user.role?.toLowerCase()}`}>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Dashboard
                   </Button>
                 </Link>
                 <div>
                   <CardTitle className="text-3xl font-bold flex items-center gap-3">
-                    <MessageCircle className="h-8 w-8 text-blue-600" />
+                    <MessageCircle className="h-10 w-10" />
                     Messages
                     {totalUnread > 0 && (
-                      <Badge variant="destructive">{totalUnread} unread</Badge>
+                      <Badge variant="destructive" className="bg-red-500 text-white animate-pulse">
+                        {totalUnread} new
+                      </Badge>
                     )}
                   </CardTitle>
-                  <p className="text-muted-foreground mt-1">
+                  <p className="text-blue-100 mt-2 text-lg">
                     {session?.user.role === 'LANDLORD' 
-                      ? 'Conversations with your tenants' 
-                      : 'Your conversations with landlords'
+                      ? 'Connect with your tenants' 
+                      : 'Chat with landlords'
                     }
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Users className="h-3 w-3" />
-                  {chatThreads.length} conversations
+              <div className="flex items-center space-x-3">
+                <Badge variant="secondary" className="bg-white/20 text-white border-white/30 flex items-center gap-2 px-3 py-1">
+                  <Users className="h-4 w-4" />
+                  {chatThreads.length} chats
                 </Badge>
               </div>
             </div>
@@ -161,26 +163,26 @@ export default function ChatListPage() {
         </Card>
 
         {/* Search and Filters */}
-        <Card className="border-0 shadow-md bg-white">
-          <CardContent className="p-4">
+        <Card className="border-0 shadow-lg bg-white">
+          <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
                 <Input
-                  placeholder="Search conversations..."
+                  placeholder="Search conversations, messages, or listings..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-12 h-12 text-base border-2 border-gray-200 rounded-xl focus:border-blue-500 transition-colors"
                 />
               </div>
               <Button
                 variant={filterUnread ? "default" : "outline"}
-                size="sm"
+                size="lg"
                 onClick={() => setFilterUnread(!filterUnread)}
-                className="flex items-center gap-2"
+                className={`flex items-center gap-2 rounded-xl px-6 transition-all ${filterUnread ? 'bg-blue-600 hover:bg-blue-700' : 'hover:bg-gray-50'}`}
               >
                 <Filter className="h-4 w-4" />
-                {filterUnread ? 'Show All' : 'Unread Only'}
+                {filterUnread ? 'All Chats' : 'Unread Only'}
               </Button>
             </div>
           </CardContent>
@@ -216,22 +218,36 @@ export default function ChatListPage() {
           ) : (
             filteredThreads.map((thread) => (
               <Link key={thread.id} href={`/chat/${thread.id}`}>
-                <Card className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-[1.02] border-0 shadow-md mb-2">
+                <Card className={`cursor-pointer hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border-0 shadow-lg mb-3 ${thread.unreadCount > 0 ? 'bg-gradient-to-r from-blue-50 to-purple-50 border-l-4 border-blue-500' : 'bg-white hover:bg-gray-50'}`}>
                   <CardContent className="p-6">
-                    <div className="flex items-center space-x-4">
-                      <Avatar className="h-14 w-14">
-                        <AvatarImage src={thread.participantAvatar} />
-                        <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold text-lg">
-                          {thread.participantName.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
+                    <div className="flex items-start space-x-4">
+                      <div className="relative">
+                        <Avatar className="h-16 w-16 ring-2 ring-white shadow-lg">
+                          <AvatarImage src={thread.participantAvatar} />
+                          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-bold text-xl">
+                            {thread.participantName.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        {thread.unreadCount > 0 && (
+                          <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
+                            <span className="text-white text-xs font-bold">{thread.unreadCount}</span>
+                          </div>
+                        )}
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-semibold text-lg text-gray-900 truncate">
-                            {thread.participantName}
-                          </h3>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm text-muted-foreground whitespace-nowrap">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <h3 className={`font-bold text-xl truncate ${thread.unreadCount > 0 ? 'text-gray-900' : 'text-gray-800'}`}>
+                              {thread.participantName}
+                            </h3>
+                            {thread.listingTitle && (
+                              <p className="text-sm text-blue-600 font-medium mb-1 truncate flex items-center">
+                                🏠 {thread.listingTitle}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end space-y-1">
+                            <span className="text-xs text-gray-500 whitespace-nowrap bg-gray-100 px-2 py-1 rounded-full">
                               {new Date(thread.lastMessageTime).toLocaleDateString('en-US', {
                                 month: 'short',
                                 day: 'numeric',
@@ -239,17 +255,9 @@ export default function ChatListPage() {
                                 minute: '2-digit'
                               })}
                             </span>
-                            {thread.unreadCount > 0 && (
-                              <Badge variant="destructive" className="ml-2">
-                                {thread.unreadCount}
-                              </Badge>
-                            )}
                           </div>
                         </div>
-                        <p className="text-sm text-blue-600 font-medium mb-2 truncate">
-                          {thread.listingTitle}
-                        </p>
-                        <p className="text-sm text-gray-600 line-clamp-2">
+                        <p className={`text-sm line-clamp-2 leading-relaxed ${thread.unreadCount > 0 ? 'text-gray-700 font-medium' : 'text-gray-600'}`}>
                           {thread.lastMessage}
                         </p>
                       </div>

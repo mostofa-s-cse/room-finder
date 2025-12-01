@@ -15,7 +15,8 @@ import {
   Video, 
   MoreVertical,
   Paperclip,
-  Smile
+  Smile,
+  MessageCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
@@ -198,71 +199,90 @@ export default function ChatThreadPage() {
      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="container mx-auto py-6 space-y-6">
       {/* Chat Header */}
-      <div className="border-b bg-white shadow-sm p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href="/chat">
-              <Button variant="ghost" size="sm" className="hover:bg-gray-100">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Avatar className="h-12 w-12">
-              <AvatarImage src={thread.participantAvatar} />
-              <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
-                {thread.participantName.charAt(0)}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <h3 className="font-semibold text-lg text-gray-900">{thread.participantName}</h3>
-              <p className="text-sm text-gray-600">
-                {thread.participantRole === 'LANDLORD' ? '🏠 Landlord' : '👤 Tenant'}
-                {thread.listingTitle && ` • ${thread.listingTitle}`}
-              </p>
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-xl rounded-t-2xl">
+        <div className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Link href="/chat">
+                <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 rounded-xl">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </Link>
+              <Avatar className="h-14 w-14 ring-4 ring-white/30">
+                <AvatarImage src={thread.participantAvatar} />
+                <AvatarFallback className="bg-white text-blue-600 font-bold text-xl">
+                  {thread.participantName.charAt(0)}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h3 className="font-bold text-xl">{thread.participantName}</h3>
+                <div className="flex items-center space-x-2 mt-1">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/20 text-white">
+                    {thread.participantRole === 'LANDLORD' ? '🏠 Landlord' : '👤 Tenant'}
+                  </span>
+                  {thread.listingTitle && (
+                    <span className="text-blue-100 text-sm truncate max-w-xs">
+                      📍 {thread.listingTitle}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="sm" className="hover:bg-gray-100">
-              <Phone className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" className="hover:bg-gray-100">
-              <Video className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" className="hover:bg-gray-100">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center space-x-3">
+              <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 rounded-xl h-10 w-10">
+                <Phone className="h-5 w-5" />
+              </Button>
+              <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 rounded-xl h-10 w-10">
+                <Video className="h-5 w-5" />
+              </Button>
+              <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 rounded-xl h-10 w-10">
+                <MoreVertical className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
-        {messages.map((message) => {
-          const isCurrentUser = message.senderId === session?.user.id || message.senderName === 'You';
-          
-          return (
-            <div
-              key={message.id}
-              className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`flex items-start space-x-3 max-w-[75%] ${isCurrentUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-gray-50 to-white min-h-[500px]">
+        {messages.length === 0 ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <MessageCircle className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500 text-lg">No messages yet</p>
+              <p className="text-gray-400 text-sm">Send your first message to get the conversation started!</p>
+            </div>
+          </div>
+        ) : (
+          messages.map((message) => {
+            const isCurrentUser = message.senderId === session?.user.id || message.senderName === 'You';
+            
+            return (
+              <div
+                key={message.id}
+                className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} mb-4`}
+              >
+              <div className={`flex items-end space-x-2 max-w-[80%] md:max-w-[70%] ${isCurrentUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
                 {!isCurrentUser && (
-                  <Avatar className="w-10 h-10">
+                  <Avatar className="w-8 h-8 mb-1">
                     <AvatarImage src={message.senderAvatar} />
-                    <AvatarFallback className="bg-blue-100 text-blue-600 font-medium">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-400 to-purple-500 text-white font-medium text-sm">
                       {message.senderName.charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                 )}
-                <div className={`rounded-2xl px-4 py-3 shadow-sm ${
-                  isCurrentUser 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-gray-100 text-gray-900'
-                }`}>
-                  <p className="text-sm leading-relaxed">{message.content}</p>
-                  <p className={`text-xs mt-2 ${
+                <div className={`relative group ${isCurrentUser ? 'ml-12' : 'mr-12'}`}>
+                  <div className={`rounded-2xl px-4 py-3 shadow-lg transition-all duration-200 group-hover:shadow-xl ${
                     isCurrentUser 
-                      ? 'text-blue-100' 
-                      : 'text-gray-500'
+                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-md' 
+                      : 'bg-white text-gray-800 border border-gray-100 rounded-bl-md'
+                  }`}>
+                    <p className="text-sm leading-relaxed break-words">{message.content}</p>
+                  </div>
+                  <p className={`text-xs mt-1 transition-opacity opacity-0 group-hover:opacity-100 ${
+                    isCurrentUser 
+                      ? 'text-right text-gray-400' 
+                      : 'text-left text-gray-400'
                   }`}>
                     {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
                   </p>
@@ -270,39 +290,55 @@ export default function ChatThreadPage() {
               </div>
             </div>
           );
-        })}
+        }))}
       </div>
 
       {/* Message Input */}
-      <div className="border-t bg-white shadow-lg p-4">
-        <div className="flex items-center space-x-3 max-w-4xl mx-auto">
-          <Button variant="ghost" size="sm" className="hover:bg-gray-100">
-            <Paperclip className="h-4 w-4 text-gray-500" />
-          </Button>
-          <div className="flex-1 relative">
-            <Input
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type a message..."
-              className="pr-12 py-3 rounded-full border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-              disabled={isSending}
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 hover:bg-gray-100"
+      <div className="bg-white shadow-2xl rounded-b-2xl border-t">
+        <div className="p-6">
+          <div className="flex items-center space-x-4 max-w-4xl mx-auto">
+            <Button variant="ghost" size="sm" className="hover:bg-gray-100 rounded-xl h-12 w-12">
+              <Paperclip className="h-5 w-5 text-gray-400" />
+            </Button>
+            <div className="flex-1 relative">
+              <Input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={`Message ${thread.participantName}...`}
+                className="h-12 px-6 pr-14 text-base rounded-2xl border-2 border-gray-200 focus:border-blue-500 focus:ring-0 transition-all bg-gray-50 focus:bg-white"
+                disabled={isSending}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 hover:bg-gray-200 rounded-xl h-8 w-8"
+              >
+                <Smile className="h-4 w-4 text-gray-500" />
+              </Button>
+            </div>
+            <Button 
+              onClick={sendMessage} 
+              disabled={!newMessage.trim() || isSending}
+              className={`rounded-2xl h-12 w-12 p-0 transition-all duration-200 ${
+                !newMessage.trim() || isSending
+                  ? 'bg-gray-300 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:scale-105'
+              }`}
             >
-              <Smile className="h-4 w-4 text-gray-500" />
+              <Send className={`h-5 w-5 ${isSending ? 'animate-pulse' : ''}`} />
             </Button>
           </div>
-          <Button 
-            onClick={sendMessage} 
-            disabled={!newMessage.trim() || isSending}
-            className="rounded-full h-10 w-10 p-0 bg-blue-500 hover:bg-blue-600"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          {isSending && (
+            <div className="flex items-center justify-center mt-3">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+              </div>
+              <span className="ml-2 text-sm text-gray-500">Sending...</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -58,6 +58,16 @@ export const reviewSchema = z.object({
   comment: z.string().min(10, 'Comment must be at least 10 characters').max(500, 'Comment must be less than 500 characters'),
 });
 
+export const contactSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name must be less than 100 characters'),
+  email: z.string().email('Please enter a valid email address'),
+  subject: z.string().min(5, 'Subject must be at least 5 characters').max(200, 'Subject must be less than 200 characters'),
+  category: z.enum(['general', 'support', 'billing', 'partnership', 'feedback', 'other'], {
+    message: 'Please select a valid category'
+  }),
+  message: z.string().min(20, 'Message must be at least 20 characters').max(2000, 'Message must be less than 2000 characters'),
+});
+
 export const searchSchema = z.object({
   city: z.string().optional(),
   maxPrice: z.number().min(0).optional(),
@@ -119,12 +129,50 @@ export const paginationSchema = z.object({
   limit: z.number().min(1).max(100).default(20),
 });
 
+// Tenant request schemas
+export const tenantRequestSchema = z.object({
+  listingId: z.string().cuid('Invalid listing ID'),
+  message: z.string().min(50, 'Message must be at least 50 characters').max(1000, 'Message must be less than 1000 characters'),
+  moveInDate: z.string().refine((date) => {
+    const moveIn = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return moveIn >= today;
+  }, 'Move-in date must be today or in the future'),
+  duration: z.enum(['3_MONTHS', '6_MONTHS', '1_YEAR', 'FLEXIBLE'], {
+    message: 'Please select a valid duration'
+  }),
+  budget: z.number().min(1000, 'Budget must be at least ৳1,000').max(100000, 'Budget must be less than ৳100,000'),
+  profession: z.string().min(2, 'Profession is required').max(100, 'Profession must be less than 100 characters').optional(),
+  company: z.string().max(100, 'Company name must be less than 100 characters').optional(),
+  monthlyIncome: z.number().min(0, 'Income must be positive').max(1000000, 'Income must be less than ৳10,00,000').optional(),
+  references: z.array(z.object({
+    name: z.string().min(2, 'Reference name is required'),
+    relationship: z.string().min(2, 'Relationship is required'), 
+    phone: z.string().min(10, 'Valid phone number is required'),
+    email: z.string().email('Valid email is required').optional(),
+  })).max(3, 'Maximum 3 references allowed').optional(),
+  emergencyContact: z.object({
+    name: z.string().min(2, 'Emergency contact name is required'),
+    relationship: z.string().min(2, 'Relationship is required'),
+    phone: z.string().min(10, 'Valid phone number is required'),
+  }).optional(),
+});
+
+export const tenantRequestResponseSchema = z.object({
+  status: z.enum(['APPROVED', 'REJECTED'], {
+    message: 'Status must be either APPROVED or REJECTED'
+  }),
+  response: z.string().min(10, 'Response message must be at least 10 characters').max(1000, 'Response must be less than 1000 characters'),
+});
+
 // Type inference from schemas
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SignupInput = z.infer<typeof signupSchema>;
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
 export type ListingInput = z.infer<typeof listingSchema>;
 export type ReviewInput = z.infer<typeof reviewSchema>;
+export type ContactInput = z.infer<typeof contactSchema>;
 export type SearchInput = z.infer<typeof searchSchema>;
 export type ChatMessageInput = z.infer<typeof chatMessageSchema>;
 export type BookingInput = z.infer<typeof bookingSchema>;
@@ -134,3 +182,5 @@ export type AdminUserUpdateInput = z.infer<typeof adminUserUpdateSchema>;
 export type PaymentInitiationInput = z.infer<typeof paymentInitiationSchema>;
 export type ImageUploadInput = z.infer<typeof imageUploadSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
+export type TenantRequestInput = z.infer<typeof tenantRequestSchema>;
+export type TenantRequestResponse = z.infer<typeof tenantRequestResponseSchema>;

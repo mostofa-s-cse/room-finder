@@ -91,14 +91,18 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       }
     });
 
-    // Convert Prisma result to our format
-    const listingsForRecommendation = listings.map(listing => ({
-      ...listing,
-      amenities: Array.isArray(listing.amenities) 
-        ? listing.amenities as string[]
-        : JSON.parse(listing.amenities as string || '[]'),
-      roomType: listing.roomType as 'SINGLE' | 'SHARED'
-    }));
+    // Convert Prisma result to our format and filter out listings without coordinates
+    const listingsForRecommendation = listings
+      .filter(listing => listing.lat !== null && listing.lng !== null)
+      .map(listing => ({
+        ...listing,
+        lat: listing.lat!,
+        lng: listing.lng!,
+        amenities: Array.isArray(listing.amenities) 
+          ? listing.amenities as string[]
+          : JSON.parse(listing.amenities as string || '[]'),
+        roomType: listing.roomType as 'SINGLE' | 'SHARED'
+      }));
 
     // Generate recommendations
     const filter: RecommendationFilter = {
@@ -226,10 +230,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       };
 
       recommendedListings = listings
+        .filter(listing => listing.lat !== null && listing.lng !== null)
         .map(listing => {
           const distance = Math.sqrt(
-            Math.pow(listing.lat - workLocation.lat, 2) + 
-            Math.pow(listing.lng - workLocation.lng, 2)
+            Math.pow(listing.lat! - workLocation.lat, 2) + 
+            Math.pow(listing.lng! - workLocation.lng, 2)
           ) * 111; // Rough km conversion
           
           return { ...listing, distance };

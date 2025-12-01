@@ -32,6 +32,7 @@ model User {
   chatParticipants        ChatParticipant[]        @relation("UserChatParticipants")
   chatReports             ChatReport[]             @relation("UserChatReports")
   chatSettings            ChatSettings?            @relation("UserChatSettings")
+  favorites               UserFavorite[]           @relation("UserFavorites")
   invoices                Invoice[]                @relation("UserInvoices")
   landlordAnalytics       LandlordAnalytics[]      @relation("LandlordAnalyticsData")
   listings                Listing[]
@@ -48,6 +49,8 @@ model User {
   transactions            Transaction[]            @relation("UserTransactions")
   userActions             UserAction[]             @relation("UserActionHistory")
   userAnalytics           UserAnalytics[]          @relation("UserAnalyticsData")
+  bachelorRequests        TenantRequest[]          @relation("BachelorRequests")
+  landlordRequests        TenantRequest[]          @relation("LandlordRequests")
 
   @@map("users")
 }
@@ -83,12 +86,14 @@ model Listing {
   payments          BookingPayment[]   @relation("ListingPayments")
   bookings          Booking[]
   chatThreads       ChatThread[]       @relation("ThreadListing")
+  favoritedBy       UserFavorite[]     @relation("ListingFavorites")
   listingAnalytics  ListingAnalytics?  @relation("ListingAnalyticsData")
   landlord          User               @relation(fields: [landlordId], references: [id], onDelete: Cascade)
   paymentIntents    PaymentIntent[]    @relation("ListingPaymentIntents")
   reports           Report[]
   reviews           Review[]
   transactions      Transaction[]      @relation("ListingTransactions")
+  tenantRequests    TenantRequest[]    @relation("ListingRequests")
 
   @@index([landlordId], map: "listings_landlordId_fkey")
   @@map("listings")
@@ -131,6 +136,8 @@ model Booking {
 
   @@index([listingId], map: "bookings_listingId_fkey")
   @@index([userId], map: "bookings_userId_fkey")
+  @@index([listingId, status, startDate, endDate], map: "bookings_conflict_check")
+  @@index([status, startDate, endDate], map: "bookings_date_range")
   @@map("bookings")
 }
 
@@ -393,6 +400,20 @@ model SavedSearch {
 
   @@index([userId], map: "saved_searches_userId_fkey")
   @@map("saved_searches")
+}
+
+model UserFavorite {
+  id        String   @id @default(cuid())
+  userId    String
+  listingId String
+  createdAt DateTime @default(now())
+  user      User     @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing  @relation("ListingFavorites", fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([userId], map: "user_favorites_userId_fkey")
+  @@index([listingId], map: "user_favorites_listingId_fkey")
+  @@map("user_favorites")
 }
 
 model SearchAnalytics {
@@ -690,6 +711,54 @@ model Invoice {
   @@index([subscriptionId], map: "invoices_subscriptionId_fkey")
   @@index([userId], map: "invoices_userId_fkey")
   @@map("invoices")
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  category  String
+  message   String   @db.Text
+  status    String   @default("PENDING")
+  response  String?  @db.Text
+  respondedAt DateTime?
+  respondedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("contacts")
+}
+
+model TenantRequest {
+  id              String   @id @default(cuid())
+  bachelorId      String
+  landlordId      String
+  listingId       String
+  message         String   @db.Text
+  moveInDate      DateTime
+  duration        String   // e.g., "6_MONTHS", "1_YEAR", "FLEXIBLE"
+  budget          Float
+  profession      String?
+  company         String?
+  monthlyIncome   Float?
+  references      Json?    // Array of references
+  documents       Json?    // Array of document URLs
+  emergencyContact Json?   // Emergency contact info
+  status          TenantRequestStatus @default(PENDING)
+  landlordResponse String? @db.Text
+  respondedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  bachelor        User     @relation("BachelorRequests", fields: [bachelorId], references: [id], onDelete: Cascade)
+  landlord        User     @relation("LandlordRequests", fields: [landlordId], references: [id], onDelete: Cascade) 
+  listing         Listing  @relation("ListingRequests", fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([bachelorId], map: "tenant_requests_bachelorId_fkey")
+  @@index([landlordId], map: "tenant_requests_landlordId_fkey")
+  @@index([listingId], map: "tenant_requests_listingId_fkey")
+  @@map("tenant_requests")
 }
 
 model WebhookEvent {
@@ -1116,4 +1185,12 @@ enum TrendDirection {
   DOWN
   STABLE
   VOLATILE
+}
+
+enum TenantRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
 }

@@ -320,7 +320,7 @@ export class SSLCommerzService {
               { providerIntentId: validation.tran_id as string },
               { 
                 metadata: {
-                  path: ['sslTransactionId'], 
+                  path: 'sslTransactionId', 
                   equals: validation.tran_id as string
                 } 
               },
@@ -389,7 +389,7 @@ export class SSLCommerzService {
         where: {
           OR: [
             { providerIntentId: transactionId },
-            { metadata: { path: ['sslTransactionId'], equals: transactionId } },
+            { metadata: { path: 'sslTransactionId', equals: transactionId } },
           ],
         },
       });

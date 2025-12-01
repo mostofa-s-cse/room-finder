@@ -39,23 +39,14 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       }
-    ],
-    domains: [
-      'images.unsplash.com',
-      'picsum.photos', 
-      'via.placeholder.com',
-      'example.com',
-      'res.cloudinary.com',
-      'cdn.pixabay.com'
     ]
   },
-  experimental: {
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
+  // Turbopack configuration for Next.js 16
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: ['@svgr/webpack'],
+        as: '*.js',
       },
     },
   }

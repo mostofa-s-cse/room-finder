@@ -55,12 +55,12 @@ const navigationItems = [
     icon: Home,
     description: 'Browse available rooms and apartments',
   },
-  {
-    title: 'For Rent',
-    href: '/search',
-    icon: Building2,
-    description: 'All available rental properties',
-  },
+  // {
+  //   title: 'For Rent',
+  //   href: '/search',
+  //   icon: Building2,
+  //   description: 'All available rental properties',
+  // },
   {
     title: 'Search',
     href: '/search',

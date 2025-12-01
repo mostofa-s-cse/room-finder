@@ -27,7 +27,8 @@ import {
   Mail,
   Settings,
   Download,
-  Bell
+  Bell,
+  FileText
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -99,23 +100,7 @@ interface Tenant {
   }[];
 }
 
-interface MaintenanceRequest {
-  id: string;
-  listingId: string;
-  listingTitle: string;
-  tenantId: string;
-  tenantName: string;
-  title: string;
-  description: string;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-  category: 'PLUMBING' | 'ELECTRICAL' | 'HVAC' | 'APPLIANCE' | 'STRUCTURAL' | 'OTHER';
-  createdAt: string;
-  completedAt?: string;
-  estimatedCost?: number;
-  actualCost?: number;
-  images?: string[];
-}
+
 
 interface FinancialData {
   monthlyRevenue: number;
@@ -185,6 +170,46 @@ interface Analytics {
   }[];
 }
 
+interface TenantRequest {
+  id: string;
+  userId: string;
+  listingId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  moveInDate: string;
+  duration: '3_MONTHS' | '6_MONTHS' | '1_YEAR' | 'FLEXIBLE';
+  budget: number;
+  occupation: string;
+  workplace?: string;
+  references: {
+    name: string;
+    relationship: string;
+    contact: string;
+  }[];
+  emergencyContact: {
+    name: string;
+    relationship: string;
+    contact: string;
+  };
+  additionalInfo?: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+  };
+  listing: {
+    id: string;
+    title: string;
+    address: string;
+    price: number;
+    images: string[];
+  };
+  landlordResponse?: string;
+  respondedAt?: string;
+}
+
 // Helper function to safely render values
 const safeRender = (value: unknown, fallback: string | number = 'N/A'): string | number => {
   if (value === null || value === undefined) return fallback;
@@ -208,7 +233,7 @@ export default function LandlordDashboard() {
   
   // Extended management state
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
+  const [tenantRequests, setTenantRequests] = useState<TenantRequest[]>([]);
   const [financialData, setFinancialData] = useState<FinancialData | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   
@@ -247,7 +272,7 @@ export default function LandlordDashboard() {
         bookingsRes, 
         analyticsRes,
         tenantsRes,
-        maintenanceRes,
+        tenantRequestsRes,
         financialRes,
         reviewsRes
       ] = await Promise.all([
@@ -256,7 +281,7 @@ export default function LandlordDashboard() {
         fetch('/api/bookings/landlord'),
         fetch('/api/analytics/landlord'),
         fetch('/api/landlord/tenants'),
-        fetch('/api/landlord/maintenance'),
+        fetch('/api/tenant-requests/landlord'),
         fetch('/api/landlord/financial'),
         fetch('/api/landlord/reviews')
       ]);
@@ -285,10 +310,11 @@ export default function LandlordDashboard() {
       } else {
         console.error('Failed to fetch tenants:', tenantsRes.status);
       }
-      if (maintenanceRes.ok) {
-        const maintenanceData = await maintenanceRes.json();
-        setMaintenanceRequests(Array.isArray(maintenanceData.data) ? maintenanceData.data : []);
+      if (tenantRequestsRes.ok) {
+        const tenantRequestsData = await tenantRequestsRes.json();
+        setTenantRequests(Array.isArray(tenantRequestsData.data) ? tenantRequestsData.data : []);
       }
+
       if (financialRes.ok) {
         const financialData = await financialRes.json();
         setFinancialData(financialData.data || financialData);
@@ -314,7 +340,7 @@ export default function LandlordDashboard() {
     // Read tab from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
-    if (tabParam && ['overview', 'listings', 'tenants', 'bookings', 'maintenance', 'financial', 'reviews', 'analytics'].includes(tabParam)) {
+    if (tabParam && ['overview', 'listings', 'tenants', 'bookings', 'financial', 'reviews', 'analytics'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
     
@@ -383,24 +409,7 @@ export default function LandlordDashboard() {
     }
   };
 
-  const updateMaintenanceRequest = async (id: string, status: MaintenanceRequest['status']) => {
-    try {
-      const response = await fetch(`/api/landlord/maintenance/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      });
-      
-      if (response.ok) {
-        setMaintenanceRequests(prev => prev.map(request => 
-          request.id === id ? { ...request, status } : request
-        ));
-        addAlert('success', 'Maintenance request updated');
-      }
-    } catch {
-      addAlert('error', 'Error updating maintenance request');
-    }
-  };
+
 
   const respondToReview = async (reviewId: string, response: string) => {
     try {
@@ -539,7 +548,7 @@ export default function LandlordDashboard() {
               </Button>
               <div className="relative">
                 <Bell className="h-5 w-5 text-slate-600" />
-                {maintenanceRequests.filter(r => r.status === 'PENDING').length > 0 && (
+                {false && (
                   <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></div>
                 )}
               </div>
@@ -616,9 +625,9 @@ export default function LandlordDashboard() {
                 <div>
                   <p className="text-orange-100 text-sm font-medium">Pending Tasks</p>
                   <p className="text-3xl font-bold">
-                    {maintenanceRequests.filter(r => r.status === 'PENDING').length}
+                    0
                   </p>
-                  <p className="text-orange-100 text-xs mt-1">Maintenance requests</p>
+                  <p className="text-orange-100 text-xs mt-1">No pending tasks</p>
                 </div>
                 <Settings className="h-12 w-12 text-orange-200" />
               </div>
@@ -653,9 +662,9 @@ export default function LandlordDashboard() {
                   <Calendar className="h-4 w-4" />
                   <span>Bookings</span>
                 </TabsTrigger>
-                <TabsTrigger value="maintenance" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                  <Settings className="h-4 w-4" />
-                  <span>Maintenance</span>
+                <TabsTrigger value="requests" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                  <FileText className="h-4 w-4" />
+                  <span>Requests</span>
                 </TabsTrigger>
                 <TabsTrigger value="financial" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
                   <DollarSign className="h-4 w-4" />
@@ -1106,77 +1115,164 @@ export default function LandlordDashboard() {
           </div>
         </TabsContent>
 
-        {/* Maintenance Tab */}
-        <TabsContent value="maintenance" className="space-y-4">
+        {/* Requests Tab */}
+        <TabsContent value="requests" className="space-y-4">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold">Maintenance Requests</h2>
-              <p className="text-muted-foreground">Manage property maintenance and repairs</p>
+              <h2 className="text-2xl font-bold">Tenant Requests</h2>
+              <p className="text-muted-foreground">Review and respond to rental applications</p>
             </div>
           </div>
           <div className="space-y-4">
-            {Array.isArray(maintenanceRequests) && maintenanceRequests.map((request) => (
+            {Array.isArray(tenantRequests) && tenantRequests.map((request) => (
               <Card key={request.id}>
                 <CardContent className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-lg font-semibold">{request.title}</h3>
-                        <Badge className={
-                          request.priority === 'URGENT' ? 'bg-red-100 text-red-800' :
-                          request.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' :
-                          request.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-blue-100 text-blue-800'
-                        }>
-                          {request.priority}
-                        </Badge>
-                        <Badge className={
-                          request.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                          request.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
-                          request.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-gray-100 text-gray-800'
-                        }>
-                          {request.status}
-                        </Badge>
+                  <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+                    <div className="flex items-center space-x-4 flex-1">
+                      {request.listing.images.length > 0 && (
+                        <Image
+                          src={request.listing.images[0]}
+                          alt={request.listing.title}
+                          width={80}
+                          height={80}
+                          className="w-20 h-20 rounded-lg object-cover"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg">{request.listing.title}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          <MapPin className="h-4 w-4 inline mr-1" />
+                          {request.listing.address}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge className={
+                            request.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                            request.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                            request.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                            request.status === 'WITHDRAWN' ? 'bg-gray-100 text-gray-800' :
+                            'bg-orange-100 text-orange-800'
+                          }>
+                            {request.status}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            Applied {new Date(request.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-2">{request.description}</p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>Property: {request.listingTitle || 'Unknown'}</span>
-                        <span>Tenant: {request.tenantName || 'Unknown'}</span>
-                        <span>Created: {new Date(request.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    
+                    <div className="flex flex-col gap-3 lg:text-right">
+                      <div>
+                        <p className="text-lg font-semibold">৳{request.budget.toLocaleString()}/month</p>
+                        <p className="text-sm text-muted-foreground">
+                          Move-in: {new Date(request.moveInDate).toLocaleDateString()}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Duration: {request.duration.replace('_', ' ')}
+                        </p>
                       </div>
-                      {(request.estimatedCost || request.actualCost) && (
-                        <div className="mt-2 text-sm">
-                          {request.estimatedCost && <span>Estimated: ৳{request.estimatedCost.toLocaleString()}</span>}
-                          {request.actualCost && <span className="ml-4">Actual: ৳{request.actualCost.toLocaleString()}</span>}
+                      
+                      <div className="bg-muted p-3 rounded-lg max-w-md">
+                        <h4 className="font-medium text-sm">Applicant: {request.user.name}</h4>
+                        <p className="text-sm text-muted-foreground">{request.user.email}</p>
+                        {request.user.phone && (
+                          <p className="text-sm text-muted-foreground">{request.user.phone}</p>
+                        )}
+                        {request.occupation && (
+                          <p className="text-sm text-muted-foreground">Occupation: {request.occupation}</p>
+                        )}
+                        {request.budget && (
+                          <p className="text-sm text-muted-foreground">
+                            Budget: ৳{request.budget.toLocaleString()}/month
+                          </p>
+                        )}
+                      </div>
+                      
+                      {request.status === 'PENDING' && (
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            onClick={async () => {
+                              const response = prompt('Enter your response message (optional):');
+                              if (response !== null) {
+                                try {
+                                  await fetch(`/api/tenant-requests/${request.id}`, {
+                                    method: 'PUT',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({
+                                      status: 'APPROVED',
+                                      response: response || 'Application approved.',
+                                    }),
+                                  });
+                                  fetchDashboardData(); // Refresh data
+                                } catch (error) {
+                                  console.error('Failed to approve request:', error);
+                                }
+                              }
+                            }}
+                          >
+                            Approve
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="destructive"
+                            onClick={async () => {
+                              const response = prompt('Enter rejection reason:');
+                              if (response) {
+                                try {
+                                  await fetch(`/api/tenant-requests/${request.id}`, {
+                                    method: 'PUT',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({
+                                      status: 'REJECTED',
+                                      response,
+                                    }),
+                                  });
+                                  fetchDashboardData(); // Refresh data
+                                } catch (error) {
+                                  console.error('Failed to reject request:', error);
+                                }
+                              }
+                            }}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                      
+                      {request.landlordResponse && (
+                        <div className="bg-blue-50 p-3 rounded-lg max-w-md">
+                          <p className="text-sm font-medium">Your Response:</p>
+                          <p className="text-sm text-muted-foreground mt-1">{request.landlordResponse}</p>
+                          {request.respondedAt && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(request.respondedAt).toLocaleDateString()}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col gap-2">
-                      {request.status === 'PENDING' && (
-                        <Button size="sm" onClick={() => updateMaintenanceRequest(request.id, 'IN_PROGRESS')}>
-                          Start Work
-                        </Button>
-                      )}
-                      {request.status === 'IN_PROGRESS' && (
-                        <Button size="sm" onClick={() => updateMaintenanceRequest(request.id, 'COMPLETED')}>
-                          Mark Complete
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline">
-                        View Details
-                      </Button>
-                    </div>
                   </div>
+                  
+                  {request.additionalInfo && (
+                    <div className="mt-4 pt-4 border-t">
+                      <h4 className="font-medium mb-2">Additional Information:</h4>
+                      <p className="text-sm text-muted-foreground">{request.additionalInfo}</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
-            {maintenanceRequests.length === 0 && (
+            {(!Array.isArray(tenantRequests) || tenantRequests.length === 0) && (
               <div className="text-center py-12">
-                <Settings className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No maintenance requests.</p>
+                <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No tenant requests yet.</p>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Maintenance requests will appear here when tenants report issues.
+                  Rental applications will appear here when bachelors apply to your listings.
                 </p>
               </div>
             )}

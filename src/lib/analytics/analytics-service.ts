@@ -1,4 +1,4 @@
-import { PrismaClient, ActionType as PrismaActionType } from '@prisma/client';
+import { PrismaClient, Prisma, ActionType as PrismaActionType } from '@prisma/client';
 import {
   UserAnalytics,
   UserAction,
@@ -414,12 +414,13 @@ export class AnalyticsService {
 
   // Geographic Analytics Methods
   async updateGeographicAnalytics(location: string): Promise<GeographicAnalytics> {
+    const searchTerm = location.toLowerCase();
     const listings = await prisma.listing.findMany({
       where: {
         OR: [
-          { city: { contains: location, mode: 'insensitive' } },
-          { location: { contains: location, mode: 'insensitive' } },
-          { address: { contains: location, mode: 'insensitive' } },
+          { city: { contains: searchTerm } },
+          { location: { contains: searchTerm } },
+          { address: { contains: searchTerm } },
         ]
       }
     });
@@ -437,7 +438,7 @@ export class AnalyticsService {
     // Calculate search volume for this location
     const searchVolume = await prisma.searchAnalytics.count({
       where: {
-        query: { contains: location, mode: 'insensitive' },
+        query: { contains: searchTerm },
         timestamp: {
           gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
         }
@@ -477,7 +478,7 @@ export class AnalyticsService {
   async getGeographicAnalytics(location?: string): Promise<GeographicAnalytics[]> {
     const results = await prisma.geographicAnalytics.findMany({
       where: location ? {
-        location: { contains: location, mode: 'insensitive' }
+        location: { contains: location.toLowerCase() }
       } : undefined,
       orderBy: { searchVolume: 'desc' }
     });

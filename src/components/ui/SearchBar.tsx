@@ -45,7 +45,7 @@ export function SearchBar({
       // Default behavior: navigate to search page
       const params = new URLSearchParams();
       if (query) params.set('q', query);
-      if (location) params.set('location', location);
+      if (location) params.set('city', location);
       router.push(`/search?${params.toString()}`);
     }
   };

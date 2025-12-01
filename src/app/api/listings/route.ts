@@ -11,16 +11,42 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const { page, limit, skip } = getPaginationParams(searchParams);
 
   // Parse search filters
+  const query = searchParams.get('q') || '';
   const city = searchParams.get('city') || undefined;
   const maxPrice = searchParams.get('maxPrice') ? Number(searchParams.get('maxPrice')) : undefined;
   const minPrice = searchParams.get('minPrice') ? Number(searchParams.get('minPrice')) : undefined;
   const roomType = searchParams.get('roomType') as 'SINGLE' | 'SHARED' | undefined;
-  const amenities = searchParams.getAll('amenities');
-  const sortBy = searchParams.get('sortBy') as 'price' | 'rating' | 'newest' || 'newest';
-  const sortOrder = searchParams.get('sortOrder') as 'asc' | 'desc' || 'desc';
+  const amenities = searchParams.get('amenities') ? searchParams.get('amenities')!.split(',') : [];
+
+  // Parse sortBy parameter and normalize it
+  const sortByParam = searchParams.get('sortBy') || 'newest';
+  let sortBy: 'price' | 'rating' | 'newest' = 'newest';
+  let sortOrder: 'asc' | 'desc' = 'desc';
+
+  if (sortByParam === 'price_asc') {
+    sortBy = 'price';
+    sortOrder = 'asc';
+  } else if (sortByParam === 'price_desc') {
+    sortBy = 'price';
+    sortOrder = 'desc';
+  } else if (sortByParam === 'rating') {
+    sortBy = 'rating';
+    sortOrder = 'desc';
+  } else if (sortByParam === 'newest') {
+    sortBy = 'newest';
+    sortOrder = 'desc';
+  }
 
   const where: Prisma.ListingWhereInput = {
     isPublished: true,
+    ...(query && {
+      OR: [
+        { title: { contains: query } },
+        { description: { contains: query } },
+        { address: { contains: query } },
+        { city: { contains: query } },
+      ],
+    }),
     ...(city && { city: { contains: city } }),
     ...(maxPrice && { price: { lte: maxPrice } }),
     ...(minPrice && { price: { gte: minPrice, ...(maxPrice && { lte: maxPrice }) } }),
@@ -88,10 +114,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const validatedData = listingSchema.parse(body);
 
   // Convert availableFrom string to Date if provided
-  const availableFromDate = validatedData.availableFrom ? new Date(validatedData.availableFrom) : null;
-  
-  // Exclude availableFrom from validatedData since we're converting it
   const { availableFrom, ...listingData } = validatedData;
+  const availableFromDate = availableFrom ? new Date(availableFrom) : null;
 
   const listing = await prisma.listing.create({
     data: {

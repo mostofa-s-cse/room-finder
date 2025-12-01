@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { useIsFavorited } from '@/hooks/useFavorites';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -19,6 +20,7 @@ import {
   Car,
   Shield,
   Zap,
+  Share2,
 } from 'lucide-react';
 import { cn, formatPrice, formatDate, formatDistance } from '@/utils/helpers';
 import { Listing, RoomType } from '@prisma/client';
@@ -54,11 +56,19 @@ export function ListingCard({
   onContact,
   className,
 }: ListingCardProps) {
-  const [isFavorited, setIsFavorited] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isSharing, setIsSharing] = useState(false);
+  
+  // Use the favorites hook for automatic checking and management
+  const { isFavorited, toggleFavorite, loading: favoriteLoading } = useIsFavorited(listing.id);
 
-  const handleFavorite = () => {
-    setIsFavorited(!isFavorited);
+  const handleFavorite = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (favoriteLoading) return;
+    
+    await toggleFavorite();
     onFavorite?.(listing.id);
   };
 
@@ -68,11 +78,50 @@ export function ListingCard({
     }
   };
 
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Prevent multiple concurrent share operations
+    if (isSharing) return;
+    
+    setIsSharing(true);
+    
+    try {
+      const shareData = {
+        title: listing.title,
+        text: `Check out this room: ${listing.title} - ${listing.price ? `৳${listing.price.toLocaleString()}` : 'Contact for price'}/month`,
+        url: `${window.location.origin}/rooms/${listing.id}`,
+      };
+
+      if (navigator.share && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        await navigator.share(shareData);
+        // Success feedback can be added here if needed
+      } else {
+        // Fallback to clipboard for desktop
+        await navigator.clipboard.writeText(shareData.url);
+        // Success feedback can be added here if needed
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+      
+      // If share fails, try clipboard as fallback
+      try {
+        await navigator.clipboard.writeText(`${window.location.origin}/rooms/${listing.id}`);
+      } catch (clipboardError) {
+        console.error('Clipboard error:', clipboardError);
+      }
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   const displayAmenities = Array.isArray(listing.amenities) 
     ? (listing.amenities as string[]).slice(0, 4) 
     : [];
 
-  const imageUrl = listing.images?.[currentImageIndex] || '/placeholder-room.jpg';
+  const imagesArray = Array.isArray(listing.images) ? (listing.images as string[]) : [];
+  const imageUrl = imagesArray[currentImageIndex] || '/placeholder-room.jpg';
 
   if (variant === 'compact') {
     return (
@@ -144,9 +193,9 @@ export function ListingCard({
           />
           
           {/* Image Navigation */}
-          {listing.images && listing.images.length > 1 && (
+          {imagesArray.length > 1 && (
             <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1">
-              {listing.images.map((_, index) => (
+              {imagesArray.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentImageIndex(index)}
@@ -187,13 +236,30 @@ export function ListingCard({
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0 bg-background/80 hover:bg-background"
+            className="h-8 w-8 p-0 bg-background/80 hover:bg-background cursor-pointer"
+            onClick={handleShare}
+            disabled={isSharing}
+            title="Share this room"
+          >
+            <Share2
+              className={cn(
+                'h-4 w-4 text-muted-foreground hover:text-primary transition-colors',
+                isSharing && 'animate-pulse'
+              )}
+            />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 bg-background/80 hover:bg-background cursor-pointer"
             onClick={handleFavorite}
+            title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
           >
             <Heart
               className={cn(
-                'h-4 w-4',
-                isFavorited ? 'fill-red-500 text-red-500' : 'text-muted-foreground'
+                'h-4 w-4 transition-colors cursor-pointer',
+                isFavorited ? 'fill-red-500 text-red-500' : 'text-muted-foreground hover:text-red-500'
               )}
             />
           </Button>
@@ -299,7 +365,7 @@ export function ListingCard({
           </Link>
           
           {listing.landlord && (
-            <Button onClick={handleContact} className="flex-1">
+            <Button onClick={handleContact} className="flex-1 cursor-pointer">
               <MessageCircle className="h-4 w-4 mr-2" />
               Contact
             </Button>

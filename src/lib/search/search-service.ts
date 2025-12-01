@@ -105,16 +105,17 @@ export class SearchService {
 
     // Location-based filtering
     if (filters.location) {
+      const locationSearch = filters.location.toLowerCase();
       where.OR = [
-        { location: { contains: filters.location, mode: 'insensitive' } },
-        { city: { contains: filters.location, mode: 'insensitive' } },
-        { address: { contains: filters.location, mode: 'insensitive' } },
-        { title: { contains: filters.location, mode: 'insensitive' } }
+        { location: { contains: locationSearch } },
+        { city: { contains: locationSearch } },
+        { address: { contains: locationSearch } },
+        { title: { contains: locationSearch } }
       ];
     }
 
     if (filters.city) {
-      where.city = { contains: filters.city, mode: 'insensitive' };
+      where.city = { contains: filters.city.toLowerCase() };
     }
 
     // Price range filtering
@@ -499,9 +500,10 @@ export class SearchService {
     };
 
     if (filters.location) {
+      const locationSearch = filters.location.toLowerCase();
       (baseWhere as Record<string, unknown>).OR = [
-        { location: { contains: filters.location, mode: 'insensitive' } },
-        { city: { contains: filters.location, mode: 'insensitive' } }
+        { location: { contains: locationSearch } },
+        { city: { contains: locationSearch } }
       ];
     }
 
@@ -691,12 +693,13 @@ export class SearchService {
   }
 
   private async getLocationSuggestions(query: string): Promise<SearchSuggestion[]> {
+    const searchTerm = query.toLowerCase();
     const locations = await prisma.listing.findMany({
       where: {
         OR: [
-          { city: { contains: query, mode: 'insensitive' } },
-          { location: { contains: query, mode: 'insensitive' } },
-          { address: { contains: query, mode: 'insensitive' } }
+          { city: { contains: searchTerm } },
+          { location: { contains: searchTerm } },
+          { address: { contains: searchTerm } }
         ]
       },
       select: { city: true, location: true, lat: true, lng: true },
@@ -704,15 +707,17 @@ export class SearchService {
       take: 5
     });
 
-    return locations.map(loc => ({
-      type: 'LOCATION' as const,
-      text: loc.city,
-      value: loc.city,
-      coordinates: {
-        lat: loc.lat,
-        lng: loc.lng
-      }
-    }));
+    return locations
+      .filter(loc => loc.lat !== null && loc.lng !== null)
+      .map(loc => ({
+        type: 'LOCATION' as const,
+        text: loc.city,
+        value: loc.city,
+        coordinates: {
+          lat: loc.lat!,
+          lng: loc.lng!
+        }
+      }));
   }
 
   private async getAmenitySuggestions(query: string): Promise<SearchSuggestion[]> {
@@ -732,17 +737,20 @@ export class SearchService {
 
   private async logSearchAnalytics(analytics: SearchAnalytics): Promise<void> {
     try {
-      await prisma.searchAnalytics.create({
-        data: {
-          searchId: analytics.searchId,
-          userId: analytics.userId,
-          query: analytics.query,
-          filters: JSON.stringify(analytics.filters),
-          resultCount: analytics.resultCount,
-          searchTime: analytics.searchTime,
-          timestamp: analytics.timestamp
-        }
-      });
+      const data: any = {
+        searchId: analytics.searchId,
+        query: analytics.query,
+        filters: JSON.stringify(analytics.filters),
+        resultCount: analytics.resultCount,
+        searchTime: analytics.searchTime,
+        timestamp: analytics.timestamp
+      };
+      
+      if (analytics.userId) {
+        data.userId = analytics.userId;
+      }
+
+      await prisma.searchAnalytics.create({ data });
     } catch (error) {
       console.error('Failed to log search analytics:', error);
     }

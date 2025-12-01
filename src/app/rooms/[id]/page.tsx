@@ -10,6 +10,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RatingStars } from '@/components/ui/RatingStars';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { AmenitiesSelector } from '@/components/ui/AmenitiesSelector';
+import { ReviewForm } from '@/components/reviews/ReviewForm';
+import { TenantRequestForm } from '@/components/forms/TenantRequestForm';
+import { BookingForm } from '@/components/forms/BookingForm';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import dynamic from 'next/dynamic';
 
 // Dynamic import for LeafletMap to avoid SSR issues
@@ -41,10 +45,12 @@ import {
   ChevronRight,
   BedDouble,
   Bath,
-  Home
+  Home,
+  FileText
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { toast } from 'react-hot-toast';
 
 interface Listing {
   id: string;
@@ -96,15 +102,17 @@ export default function RoomDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isBooking, setIsBooking] = useState(false);
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [showBookingForm, setShowBookingForm] = useState(false);
 
   // Check if room is available based on date and listing status
   const isRoomAvailable = () => {
     if (!listing) return false;
     
-    // Check if listing is marked as available
+    // First check if listing is marked as available
     if (listing.isAvailable === false) return false;
     
-    // Check if availableFrom date has passed
+    // Then check if availableFrom date has passed
     if (listing.availableFrom) {
       const availableDate = new Date(listing.availableFrom);
       const today = new Date();
@@ -118,11 +126,40 @@ export default function RoomDetailsPage() {
     return listing.isAvailable;
   };
 
+  // Check if the availableFrom date has passed
+  const isDateAvailable = () => {
+    if (!listing?.availableFrom) return true;
+    
+    const availableDate = new Date(listing.availableFrom);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    availableDate.setHours(0, 0, 0, 0);
+    
+    return availableDate <= today;
+  };
+
   const getAvailabilityMessage = () => {
     if (!listing) return 'Not Available';
     
-    if (listing.isAvailable === false) return 'Not Available';
+    // If listing is marked as unavailable by landlord
+    if (listing.isAvailable === false) {
+      // But check if there's a future availability date
+      if (listing.availableFrom) {
+        const availableDate = new Date(listing.availableFrom);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        availableDate.setHours(0, 0, 0, 0);
+        
+        if (availableDate > today) {
+          return `Available from ${availableDate.toLocaleDateString()}`;
+        } else {
+          return 'Currently Unavailable';
+        }
+      }
+      return 'Not Available';
+    }
     
+    // If listing is available, check date availability
     if (listing.availableFrom) {
       const availableDate = new Date(listing.availableFrom);
       const today = new Date();
@@ -135,6 +172,27 @@ export default function RoomDetailsPage() {
     }
     
     return 'Book Now';
+  };
+
+  const getAvailabilityBadgeVariant = () => {
+    if (!listing) return 'destructive';
+    
+    if (listing.isAvailable === false) {
+      return 'destructive';
+    }
+    
+    if (listing.availableFrom) {
+      const availableDate = new Date(listing.availableFrom);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      availableDate.setHours(0, 0, 0, 0);
+      
+      if (availableDate > today) {
+        return 'secondary'; // Future availability
+      }
+    }
+    
+    return 'default'; // Available now
   };
 
   useEffect(() => {
@@ -166,7 +224,7 @@ export default function RoomDetailsPage() {
     fetchListing();
   }, [params?.id]);
 
-  const handleBooking = async () => {
+  const handleBooking = () => {
     if (!session) {
       router.push('/auth/signin');
       return;
@@ -174,31 +232,16 @@ export default function RoomDetailsPage() {
 
     if (!listing) return;
 
-    setIsBooking(true);
-    try {
-      const response = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          listingId: listing.id,
-          message: `I'm interested in booking this room: ${listing.title}`,
-        }),
-      });
+    // Open the booking form modal
+    setShowBookingForm(true);
+  };
 
-      if (!response.ok) {
-        throw new Error('Failed to create booking');
-      }
-
-      // Redirect to dashboard or booking confirmation
-      router.push('/dashboard/bookings');
-    } catch (err) {
-      console.error('Booking error:', err);
-      // Handle error (show toast, etc.)
-    } finally {
-      setIsBooking(false);
-    }
+  const handleBookingSuccess = (booking: any) => {
+    setShowBookingForm(false);
+    toast.success('Booking created successfully!');
+    
+    // Redirect to dashboard or booking confirmation
+    router.push('/dashboard/bachelor');
   };
 
   const handleContact = () => {
@@ -222,6 +265,39 @@ export default function RoomDetailsPage() {
     setCurrentImageIndex((prev) => 
       prev === 0 ? listing.images.length - 1 : prev - 1
     );
+  };
+
+  const handleShare = async () => {
+    if (!listing) return;
+
+    const shareData = {
+      title: listing.title,
+      text: `Check out this amazing room: ${listing.title} - ৳${listing.price ? listing.price.toLocaleString() : 'Contact for price'}/month`,
+      url: window.location.href,
+    };
+
+    try {
+      // Check if Web Share API is supported
+      if (navigator.share && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        await navigator.share(shareData);
+        toast.success('Room shared successfully!');
+      } else {
+        // Fallback to clipboard
+        await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
+        toast.success('Room link copied to clipboard!');
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+      
+      // Final fallback - try clipboard again
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        toast.success('Room link copied to clipboard!');
+      } catch (clipboardError) {
+        console.error('Clipboard error:', clipboardError);
+        toast.error('Unable to share. Please copy the URL manually.');
+      }
+    }
   };
 
   if (loading) {
@@ -321,7 +397,12 @@ export default function RoomDetailsPage() {
                     )}
                     
                     <div className="absolute top-4 right-4 flex space-x-2">
-                      <Button size="icon" variant="secondary" className="bg-white/80 hover:bg-white">
+                      <Button 
+                        size="icon" 
+                        variant="secondary" 
+                        className="bg-white/80 hover:bg-white"
+                        onClick={handleShare}
+                      >
                         <Share2 className="h-4 w-4" />
                       </Button>
                       <Button size="icon" variant="secondary" className="bg-white/80 hover:bg-white">
@@ -367,8 +448,8 @@ export default function RoomDetailsPage() {
                 
                 <div className="flex flex-wrap gap-2 mt-4">
                   <Badge variant="secondary">{listing.roomType}</Badge>
-                  <Badge variant={isRoomAvailable() ? "default" : "destructive"}>
-                    {isRoomAvailable() ? "Available" : getAvailabilityMessage()}
+                  <Badge variant={getAvailabilityBadgeVariant()}>
+                    {isRoomAvailable() ? "Available Now" : getAvailabilityMessage()}
                   </Badge>
                 </div>
               </CardHeader>
@@ -448,12 +529,12 @@ export default function RoomDetailsPage() {
             </Card>
 
             {/* Reviews */}
-            {listing.reviews.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Reviews ({listing.reviewCount})</CardTitle>
-                </CardHeader>
-                <CardContent>
+            <Card>
+              <CardHeader>
+                <CardTitle>Reviews ({listing.reviewCount || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {listing.reviews.length > 0 ? (
                   <div className="space-y-4">
                     {Array.isArray(listing.reviews) && listing.reviews.slice(0, 5).map((review) => (
                       <div key={review.id} className="border-b pb-4">
@@ -477,9 +558,20 @@ export default function RoomDetailsPage() {
                       </div>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                ) : (
+                  <p className="text-gray-500 text-center py-8">No reviews yet. Be the first to review!</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Review Form */}
+            <ReviewForm 
+              listingId={listing.id}
+              onReviewSubmitted={(newReview) => {
+                // Refresh the page to show the new review and updated rating
+                window.location.reload();
+              }}
+            />
           </div>
 
           {/* Sidebar */}
@@ -496,23 +588,25 @@ export default function RoomDetailsPage() {
                 <div className="space-y-3">
                   <Button 
                     onClick={handleBooking}
-                    disabled={!isRoomAvailable() || isBooking}
+                    disabled={!isRoomAvailable()}
                     className="w-full"
                     size="lg"
                     variant={!isRoomAvailable() ? "secondary" : "default"}
                   >
-                    {isBooking ? (
-                      <>
-                        <LoadingSpinner className="mr-2 h-4 w-4" />
-                        Booking...
-                      </>
-                    ) : (
-                      <>
-                        <Calendar className="mr-2 h-4 w-4" />
-                        {getAvailabilityMessage()}
-                      </>
-                    )}
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {getAvailabilityMessage()}
                   </Button>
+                  
+                  {/* Show helpful message when unavailable */}
+                  {!isRoomAvailable() && listing?.isAvailable === false && (
+                    <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">
+                      {isDateAvailable() ? (
+                        <p>This room is currently marked as unavailable by the landlord. Contact them for more information or send a tenant request to express your interest.</p>
+                      ) : (
+                        <p>This room will be available from {new Date(listing.availableFrom).toLocaleDateString()}. You can contact the landlord or send a tenant request in advance.</p>
+                      )}
+                    </div>
+                  )}
                   
                   <Button 
                     variant="outline" 
@@ -522,6 +616,16 @@ export default function RoomDetailsPage() {
                   >
                     <MessageCircle className="mr-2 h-4 w-4" />
                     Contact Landlord
+                  </Button>
+                  
+                  <Button 
+                    variant="secondary" 
+                    onClick={() => setShowRequestForm(true)}
+                    className="w-full"
+                    size="lg"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Send Tenant Request
                   </Button>
                 </div>
                 
@@ -562,6 +666,57 @@ export default function RoomDetailsPage() {
           </div>
         </div>
       </div>
+      
+      {/* Tenant Request Dialog */}
+      <Dialog open={showRequestForm} onOpenChange={setShowRequestForm}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Send Tenant Request</DialogTitle>
+          </DialogHeader>
+          {listing && (
+            <TenantRequestForm
+              listing={{
+                id: listing.id,
+                title: listing.title,
+                address: listing.address,
+                price: listing.price,
+                images: listing.images,
+                landlord: {
+                  name: listing.landlord.name,
+                },
+              }}
+              onSuccess={() => {
+                setShowRequestForm(false);
+                toast.success('Tenant request submitted successfully!');
+              }}
+              onCancel={() => setShowRequestForm(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Booking Dialog */}
+      <Dialog open={showBookingForm} onOpenChange={setShowBookingForm}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Book {listing?.title}</DialogTitle>
+          </DialogHeader>
+          {listing && (
+            <BookingForm
+              listing={{
+                id: listing.id,
+                title: listing.title,
+                price: listing.price,
+                securityDeposit: listing.securityDeposit,
+                availableFrom: listing.availableFrom,
+                isAvailable: listing.isAvailable,
+              }}
+              onBookingSuccess={handleBookingSuccess}
+              onCancel={() => setShowBookingForm(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
