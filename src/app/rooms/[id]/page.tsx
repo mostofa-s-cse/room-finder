@@ -11,11 +11,11 @@ import { RatingStars } from '@/components/ui/RatingStars';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { AmenitiesSelector } from '@/components/ui/AmenitiesSelector';
 import { ReviewForm } from '@/components/reviews/ReviewForm';
-import { TenantRequestForm } from '@/components/forms/TenantRequestForm';
 import { BookingForm } from '@/components/forms/BookingForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import dynamic from 'next/dynamic';
 import { isAfter, startOfDay, parseISO, format } from 'date-fns';
+import { useFavorites } from '@/hooks/useFavorites';
 
 // Dynamic import for LeafletMap to avoid SSR issues
 const LeafletMapDisplay = dynamic(
@@ -47,7 +47,8 @@ import {
   BedDouble,
   Bath,
   Home,
-  FileText
+  Copy,
+  Smartphone,
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -78,7 +79,7 @@ interface Listing {
     name: string;
     phone: string;
     email: string;
-    avatar?: string;
+    profilePicture?: string;
   };
   reviews: Array<{
     id: string;
@@ -102,8 +103,9 @@ export default function RoomDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [showRequestForm, setShowRequestForm] = useState(false);
   const [showBookingForm, setShowBookingForm] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const { isFavorited, toggleFavorite, loading: favoritesLoading } = useFavorites();
 
   // Check if room is available based on listing flag and availableFrom date
   const isRoomAvailable = () => {
@@ -259,38 +261,96 @@ export default function RoomDetailsPage() {
     );
   };
 
-  const handleShare = async () => {
-    if (!listing) return;
+  const handleShare = () => {
+    setShowShareModal(true);
+  };
 
-    const shareData = {
-      title: listing.title,
-      text: `Check out this amazing room: ${listing.title} - ৳${listing.price ? listing.price.toLocaleString() : 'Contact for price'}/month`,
-      url: window.location.href,
-    };
-
+  const copyToClipboard = async (url: string) => {
     try {
-      // Check if Web Share API is supported
-      if (navigator.share && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-        await navigator.share(shareData);
-        toast.success('Room shared successfully!');
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+        toast.success('Link copied to clipboard!');
       } else {
-        // Fallback to clipboard
-        await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
-        toast.success('Room link copied to clipboard!');
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        const successful = document.execCommand('copy');
+        if (successful) {
+          toast.success('Link copied to clipboard!');
+        } else {
+          throw new Error('Copy command failed');
+        }
+        
+        document.body.removeChild(textArea);
       }
+      setShowShareModal(false);
     } catch (error) {
-      console.error('Error sharing:', error);
-      
-      // Final fallback - try clipboard again
-      try {
-        await navigator.clipboard.writeText(window.location.href);
-        toast.success('Room link copied to clipboard!');
-      } catch (clipboardError) {
-        console.error('Clipboard error:', clipboardError);
-        toast.error('Unable to share. Please copy the URL manually.');
-      }
+      console.error('Clipboard copy failed:', error);
+      toast.error('Failed to copy link');
     }
   };
+
+  const shareViaWeb = async () => {
+    if (!listing) return;
+    const shareUrl = window.location.href;
+    const shareData = {
+      title: listing.title,
+      text: listing.description,
+      url: shareUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        setShowShareModal(false);
+        toast.success('Shared successfully!');
+      } catch (error) {
+        console.error('Web share failed:', error);
+        await copyToClipboard(shareUrl);
+      }
+    } else {
+      await copyToClipboard(shareUrl);
+    }
+  };
+
+  const shareToSocialMedia = (platform: string) => {
+    if (!listing) return;
+    const shareUrl = window.location.href;
+    const text = `Check out this room: ${listing.title}`;
+    
+    let url = '';
+    
+    switch (platform) {
+      case 'whatsapp':
+        url = `https://wa.me/?text=${encodeURIComponent(text + ' ' + shareUrl)}`;
+        break;
+      case 'telegram':
+        url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`;
+        break;
+      case 'facebook':
+        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+        break;
+      case 'twitter':
+        url = `https://twitter.twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`;
+        break;
+      case 'linkedin':
+        url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
+        break;
+    }
+    
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setShowShareModal(false);
+    }
+  };
+
+  const shareUrl = listing ? window.location.href : '';
 
   if (loading) {
     return (
@@ -326,6 +386,101 @@ export default function RoomDetailsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Share Modal */}
+      <Dialog open={showShareModal} onOpenChange={setShowShareModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="h-5 w-5" />
+              Share this room
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Quick Actions */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Native Share (Mobile/Modern browsers) */}
+              {typeof navigator !== 'undefined' && 'share' in navigator && (
+                <Button
+                  onClick={shareViaWeb}
+                  className="flex items-center gap-2 h-12"
+                  variant="outline"
+                >
+                  <Smartphone className="h-4 w-4" />
+                  Share
+                </Button>
+              )}
+              
+              {/* Copy Link */}
+              <Button
+                onClick={() => copyToClipboard(shareUrl)}
+                className="flex items-center gap-2 h-12"
+                variant="outline"
+              >
+                <Copy className="h-4 w-4" />
+                Copy Link
+              </Button>
+            </div>
+
+            {/* Platform Detection */}
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Share via:</p>
+              <div className="grid grid-cols-2 gap-2">
+                {/* WhatsApp */}
+                <Button
+                  onClick={() => shareToSocialMedia('whatsapp')}
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                >
+                  <span className="text-green-600">📱</span>
+                  WhatsApp
+                </Button>
+                
+                {/* Telegram */}
+                <Button
+                  onClick={() => shareToSocialMedia('telegram')}
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                >
+                  <span className="text-blue-500">✈️</span>
+                  Telegram
+                </Button>
+                
+                {/* Facebook */}
+                <Button
+                  onClick={() => shareToSocialMedia('facebook')}
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                >
+                  <span className="text-blue-600">📘</span>
+                  Facebook
+                </Button>
+                
+                {/* Twitter */}
+                <Button
+                  onClick={() => shareToSocialMedia('twitter')}
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                >
+                  <span className="text-blue-400">🐦</span>
+                  Twitter
+                </Button>
+              </div>
+            </div>
+
+            {/* URL Preview */}
+            <div className="bg-muted p-3 rounded-md">
+              <p className="text-xs text-muted-foreground mb-1">Link:</p>
+              <p className="text-sm font-mono break-all">{shareUrl}</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Back Navigation */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-4">
@@ -341,7 +496,7 @@ export default function RoomDetailsPage() {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Image Gallery */}
-            <Card className="overflow-hidden">
+            <Card className="overflow-hidden py-0">
               <div className="relative">
                 {listing.images.length > 0 ? (
                   <div className="relative h-96 md:h-[500px]">
@@ -394,11 +549,19 @@ export default function RoomDetailsPage() {
                         variant="secondary" 
                         className="bg-white/80 hover:bg-white"
                         onClick={handleShare}
+                        aria-label="Share listing"
                       >
                         <Share2 className="h-4 w-4" />
                       </Button>
-                      <Button size="icon" variant="secondary" className="bg-white/80 hover:bg-white">
-                        <Heart className="h-4 w-4" />
+                      <Button
+                        size="icon"
+                        variant={listing && isFavorited(listing.id) ? 'default' : 'secondary'}
+                        className="bg-white/80 hover:bg-white"
+                        disabled={favoritesLoading || !listing}
+                        onClick={() => listing && toggleFavorite(listing.id)}
+                        aria-label={listing && isFavorited(listing.id) ? 'Remove from favorites' : 'Add to favorites'}
+                      >
+                        <Heart className={cn('h-4 w-4', listing && isFavorited(listing.id) ? 'fill-current text-red-500' : '')} />
                       </Button>
                     </div>
                   </div>
@@ -586,7 +749,7 @@ export default function RoomDetailsPage() {
                     variant={!isRoomAvailable() ? "secondary" : "default"}
                   >
                     <Calendar className="mr-2 h-4 w-4" />
-                    {getAvailabilityMessage()}
+                    Book Now
                   </Button>
                   
                   {/* Show helpful message when unavailable */}
@@ -610,7 +773,7 @@ export default function RoomDetailsPage() {
                     Contact Landlord
                   </Button>
                   
-                  <Button 
+                  {/* <Button 
                     variant="secondary" 
                     onClick={() => setShowRequestForm(true)}
                     className="w-full"
@@ -618,7 +781,7 @@ export default function RoomDetailsPage() {
                   >
                     <FileText className="mr-2 h-4 w-4" />
                     Send Tenant Request
-                  </Button>
+                  </Button> */}
                 </div>
                 
                 <div className="text-xs text-gray-600 text-center">
@@ -636,7 +799,11 @@ export default function RoomDetailsPage() {
               <CardContent>
                 <div className="flex items-center space-x-3 mb-4">
                   <Avatar>
-                    <AvatarImage src={listing.landlord.avatar} />
+                    <AvatarImage
+                      src={listing.landlord.profilePicture || undefined}
+                      alt={`${listing.landlord.name}'s avatar`}
+                      className='!z-10'
+                    />
                     <AvatarFallback>
                       {listing.landlord.name?.charAt(0)?.toUpperCase() || 'L'}
                     </AvatarFallback>
@@ -660,7 +827,7 @@ export default function RoomDetailsPage() {
       </div>
       
       {/* Tenant Request Dialog */}
-      <Dialog open={showRequestForm} onOpenChange={setShowRequestForm}>
+      {/* <Dialog open={showRequestForm} onOpenChange={setShowRequestForm}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Send Tenant Request</DialogTitle>
@@ -685,7 +852,7 @@ export default function RoomDetailsPage() {
             />
           )}
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
 
       {/* Booking Dialog */}
       <Dialog open={showBookingForm} onOpenChange={setShowBookingForm}>

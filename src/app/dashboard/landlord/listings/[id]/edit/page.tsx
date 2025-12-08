@@ -37,7 +37,7 @@ interface ListingFormData {
   address: string;
   lat?: number;
   lng?: number;
-  roomType: 'SINGLE' | 'SHARED' | '';
+  roomType: 'SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT' | '';
   availableFrom: string;
   images: string[];
   amenities: string[];
@@ -552,6 +552,7 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
                     <SelectContent>
                       <SelectItem value="SINGLE">Single Room</SelectItem>
                       <SelectItem value="SHARED">Shared Room</SelectItem>
+                      <SelectItem value="ENTIRE_APARTMENT">Entire Apartment</SelectItem>
                     </SelectContent>
                   </Select>
                   {errors.roomType && <p className="text-red-500 text-sm">{errors.roomType}</p>}

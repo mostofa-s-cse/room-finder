@@ -602,6 +602,7 @@ export default function NewListingPage() {
                     <SelectContent>
                       <SelectItem value="SINGLE">Single Room</SelectItem>
                       <SelectItem value="SHARED">Shared Room</SelectItem>
+                      <SelectItem value="ENTIRE_APARTMENT">Entire Apartment</SelectItem>
                     </SelectContent>
                   </Select>
                   {errors.roomType && (

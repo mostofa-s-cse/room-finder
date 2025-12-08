@@ -21,6 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             name: true,
             phone: true,
             email: true,
+            profilePicture: true,
           },
         },
         reviews: {
