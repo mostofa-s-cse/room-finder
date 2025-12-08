@@ -7,7 +7,7 @@ import { MapLocation } from '@/lib/maps/types';
 interface UseRecommendationsOptions {
   workLocation?: MapLocation & { address: string };
   preferredAmenities?: string[];
-  preferredRoomTypes?: ('SINGLE' | 'SHARED')[];
+  preferredRoomTypes?: ('SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT')[];
   maxDistance?: number;
   maxResults?: number;
   budgetFlexibility?: number;

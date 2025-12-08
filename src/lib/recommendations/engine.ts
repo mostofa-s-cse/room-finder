@@ -395,8 +395,8 @@ export class RecommendationEngine {
    * Calculate room type preference score
    */
   private static calculateRoomTypeScore(
-    listingRoomType: 'SINGLE' | 'SHARED',
-    preferredRoomTypes: ('SINGLE' | 'SHARED')[],
+    listingRoomType: 'SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT',
+    preferredRoomTypes: ('SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT')[],
     reasons: RecommendationReason[] = []
   ): number {
     if (preferredRoomTypes.length === 0) return 0;

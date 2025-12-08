@@ -50,7 +50,7 @@ export async function GET(
 
     // Find the other participant
     const otherParticipantData = thread.participants.find(
-      (p: { userId: string; user: { id: string; name: string; role: string; email?: string; profilePicture?: string } }) => p.userId !== session.user.id
+      (p) => p.userId !== session.user.id
     )?.user;
     
     if (!otherParticipantData) {

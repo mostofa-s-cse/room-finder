@@ -4,7 +4,7 @@ export interface UserPreferences {
   affordablePrice?: number;
   transportMode?: 'BIKE' | 'BUS' | 'WALK';
   preferredAmenities?: string[];
-  preferredRoomTypes?: ('SINGLE' | 'SHARED')[];
+  preferredRoomTypes?: ('SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT')[];
   maxDistance?: number; // in kilometers
   workLocation?: {
     lat: number;
@@ -26,7 +26,7 @@ export interface ListingForRecommendation {
   price: number;
   lat: number;
   lng: number;
-  roomType: 'SINGLE' | 'SHARED';
+  roomType: 'SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT';
   amenities: string[];
   ratingAvg: number;
   ratingCount: number;

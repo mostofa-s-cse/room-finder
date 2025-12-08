@@ -11,6 +11,7 @@ import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useRecommendations, useRecommendationPreferences } from '@/hooks/useRecommendations';
+import { useFavorites } from '@/hooks/useFavorites';
 import { MapLocation } from '@/lib/maps/types';
 import { DEFAULT_PRIORITY_WEIGHTS } from '@/lib/recommendations/types';
 import {
@@ -29,6 +30,7 @@ import {
   Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 import Link from 'next/link';
 
 const COMMON_AMENITIES = [
@@ -49,6 +51,8 @@ export default function RecommendationsPage() {
     getQuickRecommendations
   } = useRecommendations();
   
+  const { isFavorited, toggleFavorite, loading: favoritesLoading } = useFavorites();
+  
   const {
     updatePreferences,
     savePreferences,
@@ -57,13 +61,15 @@ export default function RecommendationsPage() {
 
   const [workLocation] = useState<(MapLocation & { address: string }) | null>(null);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
-  const [roomTypes, setRoomTypes] = useState<('SINGLE' | 'SHARED')[]>([]);
+  const [roomTypes, setRoomTypes] = useState<('SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT')[]>([]);
   const [maxDistance, setMaxDistance] = useState([25]);
   const [budgetFlexibility, setBudgetFlexibility] = useState([10]);
   const [priorityWeights, setPriorityWeights] = useState(DEFAULT_PRIORITY_WEIGHTS);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<{ income?: number; affordablePrice?: number } | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [userBookings, setUserBookings] = useState<string[]>([]);
+  const [listingAvailability, setListingAvailability] = useState<Record<string, { isAvailable: boolean; reason: string }>>({});
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -81,12 +87,45 @@ export default function RecommendationsPage() {
       }
     };
 
+    const loadUserBookings = async () => {
+      try {
+        const bookingResponse = await fetch('/api/bookings?limit=100');
+        if (bookingResponse.ok) {
+          const bookingData = await bookingResponse.json();
+          const bookings = bookingData.data || [];
+          const bookedListingIds = bookings
+            .filter((booking: { status: string }) => booking.status === 'PENDING' || booking.status === 'CONFIRMED')
+            .map((booking: { listing: { id: string } }) => booking.listing.id);
+          setUserBookings(bookedListingIds);
+        }
+      } catch (error) {
+        console.error('Failed to load user bookings:', error);
+      }
+    };
+
     if (session) {
       loadUserData();
+      loadUserBookings();
       loadPreferences();
       getQuickRecommendations({ limit: 6 });
     }
   }, [session, loadPreferences, getQuickRecommendations]);
+
+  // Fetch availability when quick recommendations load
+  useEffect(() => {
+    if (quickRecommendations.length > 0) {
+      const listingIds = quickRecommendations.map(listing => listing.id);
+      fetchListingAvailability(listingIds);
+    }
+  }, [quickRecommendations]);
+
+  // Fetch availability when recommendations load
+  useEffect(() => {
+    if (recommendations.length > 0) {
+      const listingIds = recommendations.map(result => result.listing.id);
+      fetchListingAvailability(listingIds);
+    }
+  }, [recommendations]);
 
   // Note: Preferences will be loaded manually when user changes them
 
@@ -127,7 +166,7 @@ export default function RecommendationsPage() {
     );
   };
 
-  const handleRoomTypeToggle = (roomType: 'SINGLE' | 'SHARED') => {
+  const handleRoomTypeToggle = (roomType: 'SINGLE' | 'SHARED' | 'ENTIRE_APARTMENT') => {
     setRoomTypes(prev => 
       prev.includes(roomType)
         ? prev.filter(t => t !== roomType)
@@ -150,6 +189,41 @@ export default function RecommendationsPage() {
     if (score >= 0.6) return 'text-blue-600';
     if (score >= 0.4) return 'text-yellow-600';
     return 'text-red-600';
+  };
+
+  const getAvailabilityBadge = (listingId: string) => {
+    const availability = listingAvailability[listingId];
+    
+    if (availability?.isAvailable === false) {
+      return { label: 'Not Available', color: 'bg-red-600' };
+    }
+    
+    if (userBookings.includes(listingId)) {
+      return { label: 'Already Booked', color: 'bg-purple-600' };
+    }
+    
+    return { label: 'Available', color: 'bg-green-600' };
+  };
+
+  const fetchListingAvailability = async (listingIds: string[]) => {
+    const availabilityMap: Record<string, { isAvailable: boolean; reason: string }> = {};
+    
+    for (const id of listingIds) {
+      try {
+        const response = await fetch(`/api/listings/${id}/availability`);
+        if (response.ok) {
+          const result = await response.json();
+          availabilityMap[id] = {
+            isAvailable: result.data.isAvailable,
+            reason: result.data.reason
+          };
+        }
+      } catch (error) {
+        console.error(`Failed to fetch availability for listing ${id}:`, error);
+      }
+    }
+    
+    setListingAvailability(availabilityMap);
   };
 
   if (!session) {
@@ -215,57 +289,88 @@ export default function RecommendationsPage() {
                   </div>
                 ) : quickRecommendations.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {quickRecommendations.map((listing) => (
-                      <div key={listing.id} className="relative">
-                        <Card className="h-full">
-                          <CardContent className="p-4">
-                            <div className="aspect-video bg-muted rounded-lg mb-3" />
-                            <h3 className="font-semibold mb-2">{listing.title}</h3>
-                            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                              {listing.description}
-                            </p>
-                            
-                            <div className="space-y-2 mb-4">
-                              <div className="flex items-center justify-between">
-                                <span className="text-lg font-bold text-primary">
-                                  ৳{listing.price.toLocaleString()}/month
-                                </span>
-                                <Badge className={getBudgetFitColor(listing.budgetFit)}>
-                                  {listing.budgetFit}
-                                </Badge>
-                              </div>
-                              
-                              <div className="flex items-center text-sm text-muted-foreground">
-                                <MapPin className="w-4 h-4 mr-1" />
-                                <span>{listing.city}</span>
-                              </div>
-                              
-                              <div className="flex items-center justify-between text-sm">
-                                <div className="flex items-center">
-                                  <Star className="w-4 h-4 mr-1 text-yellow-500" />
-                                  <span>{listing.ratingAvg.toFixed(1)} ({listing.ratingCount})</span>
+                    {quickRecommendations.map((listing) => {
+                      return (
+                        <div key={listing.id} className="relative">
+                          <Card className="h-full">
+                            <CardContent className="p-4 space-y-3">
+                              {/* Image */}
+                              <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+                                {listing.images && listing.images.length > 0 ? (
+                                  <Image
+                                    src={listing.images[0]}
+                                    alt={listing.title}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex items-center justify-center h-full bg-gray-200">
+                                    <MapPin className="w-8 h-8 text-gray-400" />
+                                  </div>
+                                )}
+                                
+                                {/* Availability Badge */}
+                                <div className="absolute top-2 left-2">
+                                  <Badge className={`${getAvailabilityBadge(listing.id).color} text-white`}>
+                                    {getAvailabilityBadge(listing.id).label}
+                                  </Badge>
                                 </div>
-                                <span className="font-medium text-primary">
-                                  {listing.matchPercentage}% match
-                                </span>
                               </div>
-                            </div>
-                            
-                            <div className="flex space-x-2">
-                              <Button asChild size="sm" className="flex-1">
-                                <Link href={`/rooms/${listing.id}`}>
-                                  <Eye className="w-4 h-4 mr-1" />
-                                  View
-                                </Link>
-                              </Button>
-                              <Button size="sm" variant="outline">
-                                <Heart className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    ))}
+                              
+                              <div>
+                                <h3 className="font-semibold mb-1">{listing.title}</h3>
+                                <p className="text-sm text-muted-foreground line-clamp-2">
+                                  {listing.description}
+                                </p>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-lg font-bold text-primary">
+                                    ৳{listing.price.toLocaleString()}/month
+                                  </span>
+                                  <Badge className={getBudgetFitColor(listing.budgetFit)}>
+                                    {listing.budgetFit}
+                                  </Badge>
+                                </div>
+                                
+                                <div className="flex items-center text-sm text-muted-foreground">
+                                  <MapPin className="w-4 h-4 mr-1" />
+                                  <span className="line-clamp-1">{listing.city}</span>
+                                </div>
+                                
+                                <div className="flex items-center justify-between text-sm">
+                                  <div className="flex items-center">
+                                    <Star className="w-4 h-4 mr-1 text-yellow-500" />
+                                    <span>{listing.ratingAvg.toFixed(1)} ({listing.ratingCount})</span>
+                                  </div>
+                                  <span className="font-medium text-primary">
+                                    {listing.matchPercentage}% match
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              <div className="flex space-x-2 pt-2">
+                                <Button asChild size="sm" className="flex-1">
+                                  <Link href={`/rooms/${listing.id}`}>
+                                    <Eye className="w-4 h-4 mr-1" />
+                                    View
+                                  </Link>
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant={isFavorited(listing.id) ? 'default' : 'outline'}
+                                  disabled={favoritesLoading}
+                                  onClick={() => toggleFavorite(listing.id)}
+                                >
+                                  <Heart className={cn('w-4 h-4', isFavorited(listing.id) ? 'fill-current' : '')} />
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-12">
@@ -313,7 +418,7 @@ export default function RecommendationsPage() {
                     <div className="space-y-3">
                       <Label>Preferred Room Types</Label>
                       <div className="flex flex-col space-y-2">
-                        {(['SINGLE', 'SHARED'] as const).map(type => (
+                        {(['SINGLE', 'SHARED', 'ENTIRE_APARTMENT'] as const).map(type => (
                           <div key={type} className="flex items-center space-x-2">
                             <Checkbox
                               id={type}
@@ -321,7 +426,7 @@ export default function RecommendationsPage() {
                               onCheckedChange={() => handleRoomTypeToggle(type)}
                             />
                             <Label htmlFor={type} className="text-sm">
-                              {type === 'SINGLE' ? 'Single Room' : 'Shared Room'}
+                              {type === 'SINGLE' ? 'Single Room' : type === 'SHARED' ? 'Shared Room' : 'Entire Apartment'}
                             </Label>
                           </div>
                         ))}
@@ -486,14 +591,19 @@ export default function RecommendationsPage() {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {/* Listing Info */}
                             <div className="md:col-span-2 space-y-3">
-                              <div className="flex items-start justify-between">
+                              <div className="flex items-start justify-between gap-2">
                                 <h3 className="text-lg font-semibold">{result.listing.title}</h3>
-                                <Badge className={cn(
-                                  'ml-2',
-                                  getScoreColor(result.score.totalScore)
-                                )}>
-                                  {result.matchPercentage}% match
-                                </Badge>
+                                <div className="flex gap-2">
+                                  <Badge className={cn(
+                                    'ml-2 whitespace-nowrap',
+                                    getScoreColor(result.score.totalScore)
+                                  )}>
+                                    {result.matchPercentage}% match
+                                  </Badge>
+                                  <Badge className={`${getAvailabilityBadge(result.listing.id).color} text-white whitespace-nowrap`}>
+                                    {getAvailabilityBadge(result.listing.id).label}
+                                  </Badge>
+                                </div>
                               </div>
                               
                               <p className="text-muted-foreground text-sm line-clamp-2">
@@ -572,8 +682,13 @@ export default function RecommendationsPage() {
                                     View
                                   </Link>
                                 </Button>
-                                <Button size="sm" variant="outline">
-                                  <Heart className="w-4 h-4" />
+                                <Button 
+                                  size="sm" 
+                                  variant={isFavorited(result.listing.id) ? 'default' : 'outline'}
+                                  disabled={favoritesLoading}
+                                  onClick={() => toggleFavorite(result.listing.id)}
+                                >
+                                  <Heart className={cn('w-4 h-4', isFavorited(result.listing.id) ? 'fill-current' : '')} />
                                 </Button>
                               </div>
                             </div>
@@ -611,7 +726,7 @@ export default function RecommendationsPage() {
                       <Target className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                       <h3 className="text-lg font-medium mb-2">Get Started</h3>
                       <p className="text-muted-foreground mb-4">
-                        Click \"Get Recommendations\" to find rooms that match your preferences.
+                        Click &quot;Get Recommendations&quot; to find rooms that match your preferences.
                       </p>
                     </CardContent>
                   </Card>
