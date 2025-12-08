@@ -84,6 +84,20 @@ interface ReviewModerationData {
   reportCount?: number;
 }
 
+interface ContactData {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  category: string;
+  message: string;
+  status: 'PENDING' | 'RESPONDED' | 'CLOSED';
+  response?: string | null;
+  respondedAt?: string | null;
+  respondedBy?: string | null;
+  createdAt: string;
+}
+
 
 
 export default function AdminDashboard() {
@@ -93,6 +107,7 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<UserManagementData[]>([]);
   const [listings, setListings] = useState<ListingModerationData[]>([]);
   const [reviews, setReviews] = useState<ReviewModerationData[]>([]);
+  const [contacts, setContacts] = useState<ContactData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -100,6 +115,7 @@ export default function AdminDashboard() {
   const [userPage, setUserPage] = useState(1);
   const [listingPage, setListingPage] = useState(1);
   const [reviewPage, setReviewPage] = useState(1);
+  const [contactPage, setContactPage] = useState(1);
   const itemsPerPage = 10;
 
   // View states
@@ -143,6 +159,15 @@ export default function AdminDashboard() {
     userStatus: string;
   }>({ type: null, userId: '', userName: '', userStatus: '' });
 
+  // Contact management states
+  const [selectedContact, setSelectedContact] = useState<ContactData | null>(null);
+  const [isViewingContact, setIsViewingContact] = useState(false);
+  const [contactResponse, setContactResponse] = useState<{ text: string; status: ContactData['status']; isSaving: boolean }>({
+    text: '',
+    status: 'RESPONDED',
+    isSaving: false,
+  });
+
 
 
   useEffect(() => {
@@ -156,17 +181,23 @@ export default function AdminDashboard() {
   const fetchAdminData = async () => {
     try {
       setIsLoading(true);
-      const [statsRes, usersRes, listingsRes, reviewsRes] = await Promise.all([
+      const [statsRes, usersRes, listingsRes, reviewsRes, contactsRes] = await Promise.all([
         fetch('/api/admin/stats'),
         fetch('/api/admin/users'),
         fetch('/api/admin/listings'),
-        fetch('/api/admin/reviews')
+        fetch('/api/admin/reviews'),
+        fetch('/api/contacts?limit=100')
       ]);
 
       if (statsRes.ok) setStats(await statsRes.json());
       if (usersRes.ok) setUsers(await usersRes.json());
       if (listingsRes.ok) setListings(await listingsRes.json());
       if (reviewsRes.ok) setReviews(await reviewsRes.json());
+      if (contactsRes.ok) {
+        const contactsData = await contactsRes.json();
+        // API returns paginated data shape { data, total, page, limit } or raw array fallback
+        setContacts(Array.isArray(contactsData) ? contactsData : contactsData.data || []);
+      }
     } catch (error) {
       console.error('Error fetching admin data:', error);
     } finally {
@@ -239,6 +270,55 @@ export default function AdminDashboard() {
       }
     } catch (error) {
       console.error('Error updating review:', error);
+    }
+  };
+
+  const handleViewContact = (contactId: string) => {
+    const contact = contacts.find((c) => c.id === contactId);
+    if (contact) {
+      setSelectedContact(contact);
+      setContactResponse({
+        text: contact.response || '',
+        status: contact.status,
+        isSaving: false,
+      });
+      setIsViewingContact(true);
+    }
+  };
+
+  const handleRespondContact = async () => {
+    if (!selectedContact) return;
+    if (contactResponse.text.trim().length < 10) {
+      alert('Response must be at least 10 characters');
+      return;
+    }
+
+    try {
+      setContactResponse((prev) => ({ ...prev, isSaving: true }));
+      const response = await fetch(`/api/contacts/${selectedContact.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          response: contactResponse.text.trim(),
+          status: contactResponse.status,
+        }),
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        const updatedContact: ContactData = updated.data || updated;
+
+        setContacts((prev) => prev.map((c) => (c.id === updatedContact.id ? { ...c, ...updatedContact } : c)));
+        setSelectedContact(updatedContact);
+        setIsViewingContact(false);
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to respond to contact:', errorText);
+      }
+    } catch (error) {
+      console.error('Error responding to contact:', error);
+    } finally {
+      setContactResponse((prev) => ({ ...prev, isSaving: false }));
     }
   };
 
@@ -519,6 +599,8 @@ export default function AdminDashboard() {
     switch (status) {
       case 'ACTIVE': case 'APPROVED': return 'bg-green-100 text-green-800';
       case 'PENDING': return 'bg-yellow-100 text-yellow-800';
+      case 'RESPONDED': return 'bg-blue-100 text-blue-800';
+      case 'CLOSED': return 'bg-gray-200 text-gray-800';
       case 'SUSPENDED': case 'REJECTED': return 'bg-orange-100 text-orange-800';
       case 'BANNED': case 'REPORTED': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -700,11 +782,12 @@ export default function AdminDashboard() {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="users">User Management</TabsTrigger>
           <TabsTrigger value="listings">Listing Moderation</TabsTrigger>
           <TabsTrigger value="reviews">Review Management</TabsTrigger>
+          <TabsTrigger value="contacts">Contact Messages</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -1115,7 +1198,152 @@ export default function AdminDashboard() {
             )}
           </div>
         </TabsContent>
+
+        {/* Contact Messages Tab */}
+        <TabsContent value="contacts" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Contact Messages</h2>
+              <p className="text-muted-foreground">Review inquiries from the contact page ({contacts.length} loaded)</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={fetchAdminData}>Refresh</Button>
+            </div>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="border-b">
+                    <tr className="text-left">
+                      <th className="p-4 font-medium">From</th>
+                      <th className="p-4 font-medium">Subject</th>
+                      <th className="p-4 font-medium">Category</th>
+                      <th className="p-4 font-medium">Status</th>
+                      <th className="p-4 font-medium">Received</th>
+                      <th className="p-4 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contacts.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="p-6 text-center text-muted-foreground">No contact messages yet.</td>
+                      </tr>
+                    )}
+                    {getPaginatedData(contacts, contactPage).map((contact) => (
+                      <tr key={contact.id} className="border-b">
+                        <td className="p-4">
+                          <div className="font-medium">{contact.name}</div>
+                          <div className="text-sm text-muted-foreground">{contact.email}</div>
+                        </td>
+                        <td className="p-4">
+                          <div className="font-medium truncate max-w-[240px]">{contact.subject}</div>
+                          <div className="text-sm text-muted-foreground truncate max-w-[240px]">{contact.message.slice(0, 90)}{contact.message.length > 90 ? '…' : ''}</div>
+                        </td>
+                        <td className="p-4"><Badge variant="outline">{contact.category}</Badge></td>
+                        <td className="p-4"><Badge className={getStatusColor(contact.status)}>{contact.status}</Badge></td>
+                        <td className="p-4 text-sm text-muted-foreground">{new Date(contact.createdAt).toLocaleString()}</td>
+                        <td className="p-4">
+                          <Button size="sm" variant="outline" onClick={() => handleViewContact(contact.id)}>
+                            <Eye className="h-4 w-4 mr-1" /> View
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {contacts.length > 0 && (
+                <PaginationControls
+                  currentPage={contactPage}
+                  totalItems={contacts.length}
+                  onPageChange={setContactPage}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      {/* Contact Details / Response Modal */}
+      {isViewingContact && selectedContact && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-2xl font-bold">{selectedContact.subject}</h2>
+                  <p className="text-muted-foreground">Contact Message Details</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setIsViewingContact(false)}>
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground">From</h3>
+                  <p className="font-medium">{selectedContact.name}</p>
+                  <p className="text-sm text-muted-foreground">{selectedContact.email}</p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground">Category</h3>
+                  <Badge variant="outline">{selectedContact.category}</Badge>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground">Status</h3>
+                  <Badge className={getStatusColor(selectedContact.status)}>{selectedContact.status}</Badge>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground">Received</h3>
+                  <p className="text-sm">{new Date(selectedContact.createdAt).toLocaleString()}</p>
+                </div>
+                {selectedContact.respondedAt && (
+                  <div className="col-span-2 text-sm text-muted-foreground">
+                    Responded at {new Date(selectedContact.respondedAt).toLocaleString()}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">Message</h3>
+                <div className="p-3 border rounded-md bg-gray-50 text-sm whitespace-pre-wrap">
+                  {selectedContact.message}
+                </div>
+              </div>
+
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Respond</h3>
+                  <select
+                    value={contactResponse.status}
+                    onChange={(e) => setContactResponse((prev) => ({ ...prev, status: e.target.value as ContactData['status'] }))}
+                    className="border rounded-md px-2 py-1 text-sm"
+                  >
+                    <option value="RESPONDED">Responded</option>
+                    <option value="CLOSED">Closed</option>
+                    <option value="PENDING">Pending</option>
+                  </select>
+                </div>
+                <textarea
+                  className="w-full border rounded-md p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={5}
+                  placeholder="Write a response (min 10 characters)"
+                  value={contactResponse.text}
+                  onChange={(e) => setContactResponse((prev) => ({ ...prev, text: e.target.value }))}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsViewingContact(false)}>Cancel</Button>
+                  <Button onClick={handleRespondContact} disabled={contactResponse.isSaving}>
+                    {contactResponse.isSaving ? 'Sending…' : 'Send Response'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Listing Details Modal */}
       {isViewingListing && selectedListing && (
