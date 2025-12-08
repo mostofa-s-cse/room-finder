@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { format, addDays, isAfter } from 'date-fns';
+import { format, addDays, isAfter, startOfDay, parseISO } from 'date-fns';
 import { CalendarIcon, AlertCircle, Clock } from 'lucide-react';
 import { useBookingAvailability, validateBookingDates, calculateBookingDuration } from '@/hooks/useBookingAvailability';
 import { toast } from 'react-hot-toast';
@@ -50,12 +50,29 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
   
   const { checkAvailability, isLoading: checkingAvailability } = useBookingAvailability();
 
-  // Calculate minimum date (available from date or today)
+  // Calculate minimum date (available from date or today) using date-fns
   const minDate = React.useMemo(() => {
-    const today = new Date();
-    const availableFromDate = new Date(listing.availableFrom);
-    return isAfter(availableFromDate, today) ? availableFromDate : today;
+    try {
+      const today = startOfDay(new Date());
+      const availableFromDate = startOfDay(parseISO(listing.availableFrom));
+      return isAfter(availableFromDate, today) ? availableFromDate : today;
+    } catch (error) {
+      console.error('Error parsing availableFrom date:', error);
+      return startOfDay(new Date());
+    }
   }, [listing.availableFrom]);
+
+  const isAvailableNow = React.useMemo(() => {
+    try {
+      if (listing.isAvailable === false) return false;
+      const today = startOfDay(new Date());
+      const availableFromDate = startOfDay(parseISO(listing.availableFrom));
+      return !isAfter(availableFromDate, today);
+    } catch (error) {
+      console.error('Error parsing availableFrom date:', error);
+      return listing.isAvailable !== false;
+    }
+  }, [listing.isAvailable, listing.availableFrom]);
 
   // Auto-set start date to available date if not set
   useEffect(() => {
@@ -304,7 +321,7 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
             )}
             <Button 
               type="submit" 
-              disabled={!listing.isAvailable || isSubmitting || Object.keys(errors).length > 0}
+              disabled={!isAvailableNow || isSubmitting || Object.keys(errors).length > 0}
               className="flex-1"
             >
               {isSubmitting ? (
@@ -322,13 +339,13 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
           {listing.availableFrom && (
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Clock className="h-4 w-4" />
-              <span>Available from {format(new Date(listing.availableFrom), 'MMM dd, yyyy')}</span>
+              <span>Available from {format(startOfDay(parseISO(listing.availableFrom)), 'MMM dd, yyyy')}</span>
             </div>
           )}
 
-          {!listing.isAvailable && (
+          {!isAvailableNow && (
             <Badge variant="destructive" className="w-full justify-center">
-              Currently Unavailable
+              Currently unavailable for booking
             </Badge>
           )}
         </form>

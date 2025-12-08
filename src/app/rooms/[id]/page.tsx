@@ -15,6 +15,7 @@ import { TenantRequestForm } from '@/components/forms/TenantRequestForm';
 import { BookingForm } from '@/components/forms/BookingForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import dynamic from 'next/dynamic';
+import { isAfter, startOfDay, parseISO, format } from 'date-fns';
 
 // Dynamic import for LeafletMap to avoid SSR issues
 const LeafletMapDisplay = dynamic(
@@ -101,98 +102,84 @@ export default function RoomDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isBooking, setIsBooking] = useState(false);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [showBookingForm, setShowBookingForm] = useState(false);
 
-  // Check if room is available based on date and listing status
+  // Check if room is available based on listing flag and availableFrom date
   const isRoomAvailable = () => {
     if (!listing) return false;
-    
-    // First check if listing is marked as available
     if (listing.isAvailable === false) return false;
     
-    // Then check if availableFrom date has passed
+    // Check if availableFrom date has passed (available now)
     if (listing.availableFrom) {
-      const availableDate = new Date(listing.availableFrom);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); // Reset time to compare only dates
-      availableDate.setHours(0, 0, 0, 0);
-      
-      return availableDate <= today;
+      try {
+        // Parse the availableFrom date
+        const availableDate = startOfDay(parseISO(listing.availableFrom));
+        const today = startOfDay(new Date());
+        
+        // Room is available if availableFrom date is today or in the past
+        return !isAfter(availableDate, today);
+      } catch (error) {
+        console.error('Error parsing availableFrom date:', error);
+        return true; // Default to available if there's a parsing error
+      }
     }
     
-    // If no availableFrom date, consider available if isAvailable is true
-    return listing.isAvailable;
+    // If no availableFrom date, consider available
+    return true;
   };
 
-  // Check if the availableFrom date has passed
-  const isDateAvailable = () => {
-    if (!listing?.availableFrom) return true;
-    
-    const availableDate = new Date(listing.availableFrom);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    availableDate.setHours(0, 0, 0, 0);
-    
-    return availableDate <= today;
-  };
+
 
   const getAvailabilityMessage = () => {
     if (!listing) return 'Not Available';
+    if (listing.isAvailable === false) return 'Currently Unavailable';
     
-    // If listing is marked as unavailable by landlord
-    if (listing.isAvailable === false) {
-      // But check if there's a future availability date
-      if (listing.availableFrom) {
-        const availableDate = new Date(listing.availableFrom);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        availableDate.setHours(0, 0, 0, 0);
-        
-        if (availableDate > today) {
-          return `Available from ${availableDate.toLocaleDateString()}`;
-        } else {
-          return 'Currently Unavailable';
-        }
-      }
-      return 'Not Available';
-    }
-    
-    // If listing is available, check date availability
+    // Check date availability
     if (listing.availableFrom) {
-      const availableDate = new Date(listing.availableFrom);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      availableDate.setHours(0, 0, 0, 0);
-      
-      if (availableDate > today) {
-        return `Available from ${availableDate.toLocaleDateString()}`;
+      try {
+        // Parse the availableFrom date
+        const availableDate = startOfDay(parseISO(listing.availableFrom));
+        const today = startOfDay(new Date());
+        
+        if (isAfter(availableDate, today)) {
+          return `Available from ${format(availableDate, 'MMM dd, yyyy')}`;
+        } else {
+          return 'Available Now';
+        }
+      } catch (error) {
+        console.error('Error parsing availableFrom date:', error);
+        return 'Available Now';
       }
     }
     
-    return 'Book Now';
+    // If no availableFrom date, consider available
+    return 'Available Now';
   };
 
   const getAvailabilityBadgeVariant = () => {
     if (!listing) return 'destructive';
-    
-    if (listing.isAvailable === false) {
-      return 'destructive';
-    }
+    if (listing.isAvailable === false) return 'destructive';
     
     if (listing.availableFrom) {
-      const availableDate = new Date(listing.availableFrom);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      availableDate.setHours(0, 0, 0, 0);
-      
-      if (availableDate > today) {
-        return 'secondary'; // Future availability
+      try {
+        // Parse the availableFrom date
+        const availableDate = startOfDay(parseISO(listing.availableFrom));
+        const today = startOfDay(new Date());
+        
+        if (isAfter(availableDate, today)) {
+          return 'secondary'; // Future availability - gray
+        } else {
+          return 'default'; // Available now - green
+        }
+      } catch (error) {
+        console.error('Error parsing availableFrom date:', error);
+        return 'default';
       }
     }
     
-    return 'default'; // Available now
+    // If no availableFrom date, consider available
+    return 'default';
   };
 
   useEffect(() => {
@@ -232,11 +219,16 @@ export default function RoomDetailsPage() {
 
     if (!listing) return;
 
+    if (!isRoomAvailable()) {
+      toast.error('This room is not currently available for booking.');
+      return;
+    }
+
     // Open the booking form modal
     setShowBookingForm(true);
   };
 
-  const handleBookingSuccess = (booking: any) => {
+  const handleBookingSuccess = () => {
     setShowBookingForm(false);
     toast.success('Booking created successfully!');
     
@@ -449,7 +441,7 @@ export default function RoomDetailsPage() {
                 <div className="flex flex-wrap gap-2 mt-4">
                   <Badge variant="secondary">{listing.roomType}</Badge>
                   <Badge variant={getAvailabilityBadgeVariant()}>
-                    {isRoomAvailable() ? "Available Now" : getAvailabilityMessage()}
+                    {getAvailabilityMessage()}
                   </Badge>
                 </div>
               </CardHeader>
@@ -567,7 +559,7 @@ export default function RoomDetailsPage() {
             {/* Review Form */}
             <ReviewForm 
               listingId={listing.id}
-              onReviewSubmitted={(newReview) => {
+              onReviewSubmitted={() => {
                 // Refresh the page to show the new review and updated rating
                 window.location.reload();
               }}
@@ -598,10 +590,10 @@ export default function RoomDetailsPage() {
                   </Button>
                   
                   {/* Show helpful message when unavailable */}
-                  {!isRoomAvailable() && listing?.isAvailable === false && (
+                  {!isRoomAvailable() && (
                     <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">
-                      {isDateAvailable() ? (
-                        <p>This room is currently marked as unavailable by the landlord. Contact them for more information or send a tenant request to express your interest.</p>
+                      {listing.isAvailable === false ? (
+                        <p>This room is currently unavailable. You can contact the landlord or send a tenant request to be notified.</p>
                       ) : (
                         <p>This room will be available from {new Date(listing.availableFrom).toLocaleDateString()}. You can contact the landlord or send a tenant request in advance.</p>
                       )}

@@ -286,31 +286,15 @@ function SigninContent() {
                       <p className="text-xs text-blue-600/70 font-mono">ahmed@example.com</p>
                     </div>
                     <div className="flex gap-1">
+                      
                       <Button
                         type="button"
-                        variant="outline"
                         size="sm"
                         disabled={loading}
                         onClick={() => {
                           setFormData({ email: 'ahmed@example.com', password: 'bachelor123' });
                           setFormErrors({});
                           setError(null);
-                        }}
-                        className="h-8 px-3 text-xs border-blue-200 text-blue-600 hover:bg-blue-50"
-                      >
-                        Fill
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={loading}
-                        onClick={async (e) => {
-                          setFormData({ email: 'ahmed@example.com', password: 'bachelor123' });
-                          setFormErrors({});
-                          setError(null);
-                          setTimeout(async () => {
-                            await handleSubmit(e as any);
-                          }, 100);
                         }}
                         className="h-8 px-3 bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
                       >
@@ -331,31 +315,15 @@ function SigninContent() {
                       <p className="text-xs text-green-600/70 font-mono">karim@example.com</p>
                     </div>
                     <div className="flex gap-1">
+                      
                       <Button
                         type="button"
-                        variant="outline"
                         size="sm"
                         disabled={loading}
                         onClick={() => {
                           setFormData({ email: 'karim@example.com', password: 'landlord123' });
                           setFormErrors({});
                           setError(null);
-                        }}
-                        className="h-8 px-3 text-xs border-green-200 text-green-600 hover:bg-green-50"
-                      >
-                        Fill
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={loading}
-                        onClick={async (e) => {
-                          setFormData({ email: 'karim@example.com', password: 'landlord123' });
-                          setFormErrors({});
-                          setError(null);
-                          setTimeout(async () => {
-                            await handleSubmit(e as any);
-                          }, 100);
                         }}
                         className="h-8 px-3 bg-green-600 hover:bg-green-700 text-white shadow-sm"
                       >
@@ -378,29 +346,12 @@ function SigninContent() {
                     <div className="flex gap-1">
                       <Button
                         type="button"
-                        variant="outline"
                         size="sm"
                         disabled={loading}
                         onClick={() => {
                           setFormData({ email: 'admin@roomfinder.com', password: 'admin123' });
                           setFormErrors({});
                           setError(null);
-                        }}
-                        className="h-8 px-3 text-xs border-purple-200 text-purple-600 hover:bg-purple-50"
-                      >
-                        Fill
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={loading}
-                        onClick={async (e) => {
-                          setFormData({ email: 'admin@roomfinder.com', password: 'admin123' });
-                          setFormErrors({});
-                          setError(null);
-                          setTimeout(async () => {
-                            await handleSubmit(e as any);
-                          }, 100);
                         }}
                         className="h-8 px-3 bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
                       >

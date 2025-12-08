@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
                 id: true,
                 name: true,
                 role: true,
+                profilePicture: true,
               },
             },
           },
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest) {
                   select: {
                     id: true,
                     name: true,
+                    email: true,
+                    profilePicture: true,
                   },
                 },
               },
@@ -76,7 +79,11 @@ export async function GET(request: NextRequest) {
         id: thread.id,
         participantId: otherParticipant?.id || '',
         participantName: otherParticipant?.name || 'Unknown User',
-        participantAvatar: undefined,
+        participantAvatar: otherParticipant?.profilePicture || (
+          otherParticipant?.email
+            ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(otherParticipant.email)}`
+            : undefined
+        ),
         participantRole: otherParticipant?.role || 'BACHELOR',
         lastMessage: lastMessage?.content || 'No messages yet',
         lastMessageTime: lastMessage?.createdAt || thread.createdAt,

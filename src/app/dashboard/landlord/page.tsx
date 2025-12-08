@@ -479,6 +479,30 @@ export default function LandlordDashboard() {
     }
   };
 
+  // Booking management
+  const handleUpdateBookingStatus = async (bookingId: string, nextStatus: Booking['status']) => {
+    try {
+      const response = await fetch(`/api/bookings/${bookingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      if (!response.ok) {
+        addAlert('error', 'Failed to update booking status');
+        return;
+      }
+
+      const data = await response.json();
+      const updated = data.data || data;
+      setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: updated.status } : b));
+      addAlert('success', `Booking ${nextStatus.toLowerCase()} successfully`);
+    } catch (error) {
+      console.error('Error updating booking status:', error);
+      addAlert('error', 'Error updating booking status');
+    }
+  };
+
   // Utility functions
   const addAlert = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -654,18 +678,18 @@ export default function LandlordDashboard() {
                   <Building className="h-4 w-4" />
                   <span>Listings</span>
                 </TabsTrigger>
-                <TabsTrigger value="tenants" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                {/* <TabsTrigger value="tenants" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
                   <Users className="h-4 w-4" />
                   <span>Tenants</span>
-                </TabsTrigger>
+                </TabsTrigger> */}
                 <TabsTrigger value="bookings" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
                   <Calendar className="h-4 w-4" />
                   <span>Bookings</span>
                 </TabsTrigger>
-                <TabsTrigger value="requests" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                {/* <TabsTrigger value="requests" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
                   <FileText className="h-4 w-4" />
                   <span>Requests</span>
-                </TabsTrigger>
+                </TabsTrigger> */}
                 <TabsTrigger value="financial" className="flex items-center space-x-2 data-[state=active]:bg-white data-[state=active]:shadow-sm">
                   <DollarSign className="h-4 w-4" />
                   <span>Financial</span>
@@ -927,10 +951,18 @@ export default function LandlordDashboard() {
                       <div className="flex gap-2 mt-2">
                         {booking.status === 'PENDING' && (
                           <>
-                            <Button size="sm" variant="outline">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleUpdateBookingStatus(booking.id, 'CONFIRMED')}
+                            >
                               Accept
                             </Button>
-                            <Button size="sm" variant="destructive">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleUpdateBookingStatus(booking.id, 'CANCELLED')}
+                            >
                               Decline
                             </Button>
                           </>

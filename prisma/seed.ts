@@ -119,7 +119,8 @@ async function main() {
       email: 'admin@roomfinder.com',
       passwordHash: adminPassword,
       role: UserRole.ADMIN,
-      phone: '+8801700000000'
+      phone: '+8801700000000',
+      profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin@roomfinder.com'
     }
   });
 
@@ -136,7 +137,8 @@ async function main() {
         phone: '+8801700000001',
         income: 40000,
         affordablePrice: 12000,
-        transportMode: TransportMode.BUS
+        transportMode: TransportMode.BUS,
+        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=ahmed@example.com'
       }
     }),
     prisma.user.create({
@@ -148,7 +150,8 @@ async function main() {
         phone: '+8801700000002',
         income: 60000,
         affordablePrice: 18000,
-        transportMode: TransportMode.BIKE
+        transportMode: TransportMode.BIKE,
+        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=ali@example.com'
       }
     }),
     prisma.user.create({
@@ -160,7 +163,8 @@ async function main() {
         phone: '+8801700000003',
         income: 30000,
         affordablePrice: 9000,
-        transportMode: TransportMode.WALK
+        transportMode: TransportMode.WALK,
+        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rafiul@example.com'
       }
     })
   ]);
@@ -175,7 +179,8 @@ async function main() {
         email: 'karim@example.com',
         passwordHash: landlordPassword,
         role: UserRole.LANDLORD,
-        phone: '+8801800000001'
+        phone: '+8801800000001',
+        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=karim@example.com'
       }
     }),
     prisma.user.create({
@@ -184,7 +189,8 @@ async function main() {
         email: 'fatema@example.com',
         passwordHash: landlordPassword,
         role: UserRole.LANDLORD,
-        phone: '+8801800000002'
+        phone: '+8801800000002',
+        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=fatema@example.com'
       }
     }),
     prisma.user.create({
@@ -193,7 +199,8 @@ async function main() {
         email: 'rahim@example.com',
         passwordHash: landlordPassword,
         role: UserRole.LANDLORD,
-        phone: '+8801800000003'
+        phone: '+8801800000003',
+        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rahim@example.com'
       }
     })
   ]);

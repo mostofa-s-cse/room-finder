@@ -27,7 +27,9 @@ export async function GET(
               select: {
                 id: true,
                 name: true,
-                role: true
+                role: true,
+                email: true,
+                profilePicture: true
               }
             }
           }
@@ -48,7 +50,7 @@ export async function GET(
 
     // Find the other participant
     const otherParticipantData = thread.participants.find(
-      (p: { userId: string; user: { id: string; name: string; role: string } }) => p.userId !== session.user.id
+      (p: { userId: string; user: { id: string; name: string; role: string; email?: string; profilePicture?: string } }) => p.userId !== session.user.id
     )?.user;
     
     if (!otherParticipantData) {
@@ -59,7 +61,11 @@ export async function GET(
       id: thread.id,
       participantId: otherParticipantData.id,
       participantName: otherParticipantData.name,
-      participantAvatar: undefined,
+      participantAvatar: otherParticipantData.profilePicture || (
+        otherParticipantData.email
+          ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(otherParticipantData.email)}`
+          : undefined
+      ),
       participantRole: otherParticipantData.role,
       listingId: thread.listingId,
       listingTitle: thread.listing?.title,

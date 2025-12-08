@@ -22,6 +22,7 @@ export const signupSchema = z.object({
 export const profileUpdateSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(50, 'Name must be less than 50 characters'),
   phone: z.string().regex(/^(\+88)?01[3-9]\d{8}$/, 'Please enter a valid Bangladeshi phone number').optional().or(z.literal('')),
+  profilePicture: z.string().optional(),
   income: z.number().min(0, 'Income must be a positive number').optional(),
   affordablePrice: z.number().min(0, 'Affordable price must be a positive number').optional(),
   transportMode: z.enum(['BIKE', 'BUS', 'WALK']).optional(),

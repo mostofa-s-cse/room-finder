@@ -15,6 +15,7 @@ model User {
   passwordHash            String
   role                    UserRole                 @default(BACHELOR)
   status                  String                   @default("ACTIVE")
+  profilePicture          String?
   income                  Float?
   affordablePrice         Float?
   transportMode           TransportMode?

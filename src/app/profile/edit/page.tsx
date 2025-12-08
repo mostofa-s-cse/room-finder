@@ -15,10 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   User, 
-  Mail, 
-  Phone, 
   Building, 
-  DollarSign, 
   MapPin, 
   Upload,
   Check,
@@ -115,7 +112,7 @@ const AMENITIES = [
 ];
 
 export default function ProfileEditPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -210,6 +207,31 @@ export default function ProfileEditPage() {
     e.preventDefault();
     if (!validateForm()) return;
 
+    // Map frontend fields to backend schema
+    const payload: {
+      name?: string;
+      phone?: string;
+      profilePicture?: string;
+      income?: number;
+      affordablePrice?: number;
+      transportMode?: string;
+    } = {
+      name: profile?.name,
+      phone: profile?.phone,
+      profilePicture: profile?.profilePicture,
+    };
+
+    // Map income/affordablePrice for BACHELOR
+    if (profile?.role === 'BACHELOR') {
+      if (profile.monthlyIncome !== undefined) {
+        payload.income = profile.monthlyIncome;
+      }
+      if (profile.preferences?.maxBudget !== undefined) {
+        payload.affordablePrice = profile.preferences.maxBudget;
+      }
+      // Optionally, you can add transportMode if you have it in your UI
+    }
+
     try {
       setIsSaving(true);
       const response = await fetch('/api/users/profile', {
@@ -217,10 +239,20 @@ export default function ProfileEditPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(profile),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
+        const result = await response.json();
+        const updatedUser = result.data || result;
+        // Update the session with new profile data
+        await update({
+          user: {
+            ...session?.user,
+            name: updatedUser.name,
+            image: updatedUser.profilePicture,
+          }
+        });
         toast.success('Profile updated successfully!');
         // Redirect to appropriate dashboard
         const redirectPath = profile?.role === 'BACHELOR' 
@@ -298,12 +330,107 @@ export default function ProfileEditPage() {
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <Button type="button" variant="outline" size="sm">
+                  <input
+                    type="file"
+                    id="profile-picture-upload"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      // Validate file size (5MB)
+                      if (file.size > 5 * 1024 * 1024) {
+                        toast.error('File too large. Maximum size is 5MB');
+                        return;
+                      }
+
+                      try {
+                        toast.loading('Uploading profile picture...');
+                        
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('type', 'profile');
+
+                        const uploadResponse = await fetch('/api/upload/image', {
+                          method: 'POST',
+                          body: formData,
+                        });
+
+                        if (uploadResponse.ok) {
+                          const uploadResult = await uploadResponse.json();
+                          const imageUrl = uploadResult.urls?.[0];
+                          
+                          if (imageUrl && profile) {
+                            // Create updated profile data with new image
+                            const updatedProfileData = {
+                              name: profile.name,
+                              phone: profile.phone,
+                              profilePicture: imageUrl,
+                            };
+                            
+                            console.log('Saving profile picture:', updatedProfileData);
+                            
+                            // Immediately save to database
+                            const saveResponse = await fetch('/api/users/profile', {
+                              method: 'PUT',
+                              headers: {
+                                'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify(updatedProfileData),
+                            });
+
+                            console.log('Save response status:', saveResponse.status);
+
+                            if (saveResponse.ok) {
+                              const result = await saveResponse.json();
+                              console.log('Save result:', result);
+                              const updatedUser = result.data || result;
+                              
+                              // Update profile state
+                              setProfile(prev => prev ? { ...prev, profilePicture: imageUrl } : null);
+                              
+                              // Update the session with new profile picture
+                              await update({
+                                user: {
+                                  ...session?.user,
+                                  image: updatedUser.profilePicture,
+                                }
+                              });
+                              
+                              toast.dismiss();
+                              toast.success('Profile picture updated successfully!');
+                            } else {
+                              const errorData = await saveResponse.json();
+                              console.error('Save error:', errorData);
+                              toast.dismiss();
+                              toast.error('Failed to save profile picture');
+                            }
+                          }
+                        } else {
+                          const errorData = await uploadResponse.json();
+                          console.error('Upload error:', errorData);
+                          toast.dismiss();
+                          toast.error('Failed to upload image');
+                        }
+                      } catch (error) {
+                        console.error('Upload error:', error);
+                        toast.dismiss();
+                        toast.error('An error occurred while uploading');
+                      }
+                    }}
+                  />
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => document.getElementById('profile-picture-upload')?.click()}
+                  >
                     <Upload className="h-4 w-4 mr-2" />
                     Change Photo
                   </Button>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Upload a clear profile photo
+                    Upload a clear profile photo (Max 5MB)
                   </p>
                 </div>
               </div>

@@ -7,17 +7,20 @@ import { withErrorHandling, ApiErrorClass } from '@/lib/api-utils';
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const data = await request.formData();
   const files = data.getAll('file') as File[]; // Changed from 'images' to 'file' to match the form data key
+  const uploadType = data.get('type') as string || 'listing'; // 'profile' or 'listing'
   
   if (!files || files.length === 0) {
     throw new ApiErrorClass('No images were provided. Please select at least one image to upload.', 'VALIDATION_ERROR', 400);
   }
 
-  // Validate maximum number of files (10 files max)
-  if (files.length > 10) {
-    throw new ApiErrorClass('Too many files. Maximum 10 images allowed per upload.', 'VALIDATION_ERROR', 400);
+  // Validate maximum number of files (10 files max for listings, 1 for profile)
+  const maxFiles = uploadType === 'profile' ? 1 : 10;
+  if (files.length > maxFiles) {
+    throw new ApiErrorClass(`Too many files. Maximum ${maxFiles} image(s) allowed per upload.`, 'VALIDATION_ERROR', 400);
   }
 
-  const uploadDir = join(process.cwd(), 'public', 'uploads', 'listings');
+  const uploadSubDir = uploadType === 'profile' ? 'profiles' : 'listings';
+  const uploadDir = join(process.cwd(), 'public', 'uploads', uploadSubDir);
   
   // Create uploads directory if it doesn't exist
   if (!existsSync(uploadDir)) {
@@ -53,7 +56,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(2, 15);
       const fileExtension = file.name.split('.').pop()?.toLowerCase();
-      const fileName = `listing_${timestamp}_${randomString}.${fileExtension}`;
+      const prefix = uploadType === 'profile' ? 'profile' : 'listing';
+      const fileName = `${prefix}_${timestamp}_${randomString}.${fileExtension}`;
       
       const filePath = join(uploadDir, fileName);
       
@@ -64,7 +68,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       await writeFile(filePath, buffer);
       
       // Return the public URL
-      const publicUrl = `/uploads/listings/${fileName}`;
+      const publicUrl = `/uploads/${uploadSubDir}/${fileName}`;
       uploadedImages.push(publicUrl);
     } catch (fileError) {
       console.error(`Error processing file ${file.name}:`, fileError);

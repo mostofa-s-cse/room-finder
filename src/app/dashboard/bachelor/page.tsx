@@ -93,13 +93,13 @@ interface Booking {
 interface ChatThread {
   id: string;
   // Real API structure from Prisma
-  participants: Array<{
+  participants?: Array<{
     user: {
       id: string;
       name: string;
     };
   }>;
-  messages: Array<{
+  messages?: Array<{
     content: string;
     createdAt: string;
     sender: {
@@ -115,9 +115,14 @@ interface ChatThread {
     price: number;
   };
   lastMessageAt: string;
-  _count: {
+  _count?: {
     messages: number;
   };
+  // API response properties
+  participantId?: string;
+  participantName?: string;
+  participantAvatar?: string;
+  participantRole?: string;
   // Derived properties for display
   landlordName?: string;
   landlordAvatar?: string;
@@ -125,6 +130,8 @@ interface ChatThread {
   lastMessageTime?: string;
   unreadCount?: number;
   listingTitle?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface TenantRequest {
@@ -167,24 +174,23 @@ function BachelorDashboardContent() {
   const [activeTab, setActiveTab] = useState('overview');
 
   // Transform real API chat data to display format
-  const transformChatThreads = (threads: ChatThread[], currentUserId: string): ChatThread[] => {
-    return threads.map(thread => {
-      // Find the other participant (not current user)
-      const otherParticipant = thread.participants?.find(
-        (p) => p.user.id !== currentUserId
-      );
-      
-      // Get the last message
-      const lastMessage = thread.messages?.[0];
+  const transformChatThreads = (threads: ChatThread[]): ChatThread[] => {
+    return threads.map((thread) => {
+      // API returns transformed data with participantName, participantRole, etc.
+      const landlordName = thread.participantName || thread.landlordName || 'Unknown User';
+      const listingTitle = thread.listingTitle || thread.listing?.title || 'Property Discussion';
+      const lastMessage = thread.lastMessage || 'No messages yet';
+      const lastMessageTime = thread.lastMessageTime || thread.lastMessageAt;
+      const unreadCount = thread.unreadCount || 0;
       
       return {
         ...thread,
-        landlordName: otherParticipant?.user.name || 'Unknown User',
-        landlordAvatar: '',
-        lastMessage: lastMessage?.content || 'No messages yet',
-        lastMessageTime: lastMessage?.createdAt || thread.lastMessageAt,
-        unreadCount: 0, // TODO: Calculate actual unread count
-        listingTitle: thread.listing?.title || 'Property Discussion'
+        landlordName,
+        landlordAvatar: thread.participantAvatar || '',
+        lastMessage,
+        lastMessageTime,
+        unreadCount,
+        listingTitle
       };
     });
   };
@@ -219,8 +225,12 @@ function BachelorDashboardContent() {
         const favoritesResponse = await favoritesRes.json();
         const favoritesData = favoritesResponse.data || favoritesResponse;
         // Extract listing data from favorites API response
-        const extractedListings = Array.isArray(favoritesData) 
-          ? favoritesData.map((fav: any) => fav.listing || fav).filter(Boolean)
+        const extractedListings: Listing[] = Array.isArray(favoritesData) 
+          ? favoritesData
+              .map((fav: Listing | { listing?: Listing }) => 
+                'listing' in fav ? fav.listing : fav
+              )
+              .filter((item): item is Listing => item !== undefined && item !== null)
           : [];
         setFavorites(extractedListings);
       } else {
@@ -249,8 +259,8 @@ function BachelorDashboardContent() {
         if (chatRes.ok) {
           const chatResponse = await chatRes.json();
           const chatData = chatResponse.data || chatResponse;
-          if (Array.isArray(chatData) && session?.user?.id) {
-            const transformedThreads = transformChatThreads(chatData, session.user.id);
+          if (Array.isArray(chatData)) {
+            const transformedThreads = transformChatThreads(chatData);
             setChatThreads(transformedThreads);
           } else {
             setChatThreads([]);
@@ -268,7 +278,7 @@ function BachelorDashboardContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [session?.user?.id]);
+  }, []);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -381,7 +391,7 @@ function BachelorDashboardContent() {
           <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
           <TabsTrigger value="favorites">Favorites</TabsTrigger>
           <TabsTrigger value="bookings">Bookings</TabsTrigger>
-          <TabsTrigger value="requests">Requests</TabsTrigger>
+          {/* <TabsTrigger value="requests">Requests</TabsTrigger> */}
           <TabsTrigger value="chats">Messages</TabsTrigger>
         </TabsList>
 

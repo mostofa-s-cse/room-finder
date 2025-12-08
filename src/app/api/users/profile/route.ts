@@ -15,6 +15,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       email: true,
       phone: true,
       role: true,
+      profilePicture: true,
       income: true,
       affordablePrice: true,
       transportMode: true,
@@ -49,6 +50,7 @@ export const PUT = withErrorHandling(async (request: NextRequest) => {
     data: {
       ...(validatedData.name && { name: validatedData.name }),
       ...(validatedData.phone && { phone: validatedData.phone }),
+      ...(validatedData.profilePicture !== undefined && { profilePicture: validatedData.profilePicture }),
       ...(validatedData.income !== undefined && { income: validatedData.income }),
       ...(validatedData.affordablePrice !== undefined && { affordablePrice: validatedData.affordablePrice }),
       ...(validatedData.transportMode && { transportMode: validatedData.transportMode }),
@@ -59,6 +61,7 @@ export const PUT = withErrorHandling(async (request: NextRequest) => {
       email: true,
       phone: true,
       role: true,
+      profilePicture: true,
       income: true,
       affordablePrice: true,
       transportMode: true,

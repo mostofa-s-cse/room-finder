@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { MapPin, Heart, Share2, Star, Copy, Smartphone } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'react-hot-toast';
 import { formatPrice } from '@/utils/helpers';
@@ -47,12 +47,57 @@ export function ListingCard({ listing, className = "", isFavorited: initialFavor
   const { data: session } = useSession();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [availability, setAvailability] = useState<{
+    isAvailable: boolean;
+    availableFrom: string;
+    loading: boolean;
+  }>({ 
+    isAvailable: listing.isAvailable, 
+    availableFrom: listing.availableFrom,
+    loading: true 
+  });
   
   // Use the favorites hook for automatic checking and management
   const { isFavorited: isFavoritedFromHook, toggleFavorite, loading: favoriteLoading, initialLoading } = useIsFavorited(listing.id);
   
   // Use hook data if available, otherwise fall back to prop
   const isFavorited = initialLoading ? initialFavorited : isFavoritedFromHook;
+
+  // Check availability from API
+  const checkAvailability = async () => {
+    try {
+      const response = await fetch(`/api/listings/${listing.id}/availability`);
+      if (response.ok) {
+        const result = await response.json();
+        const data = result.data; // API response is wrapped in { data: ... }
+        setAvailability({
+          isAvailable: data.isAvailable,
+          availableFrom: data.availableFrom,
+          loading: false
+        });
+      } else {
+        // Fallback to listing data if API fails
+        setAvailability({
+          isAvailable: listing.isAvailable,
+          availableFrom: listing.availableFrom,
+          loading: false
+        });
+      }
+    } catch (error) {
+      console.error('Failed to check availability:', error);
+      // Fallback to listing data on error
+      setAvailability({
+        isAvailable: listing.isAvailable,
+        availableFrom: listing.availableFrom,
+        loading: false
+      });
+    }
+  };
+
+  // Check availability on mount and when listing ID changes
+  useEffect(() => {
+    checkAvailability();
+  }, [listing.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFavorite = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -285,7 +330,7 @@ export function ListingCard({ listing, className = "", isFavorited: initialFavor
         </DialogContent>
       </Dialog>
 
-      <Card className={`group hover:shadow-lg transition-shadow duration-200 ${className}`}>
+      <Card className={`group hover:shadow-lg transition-shadow duration-200 pt-0 ${className}`}>
       <div className="relative">
         <Link href={`/rooms/${listing.id}`} className="block">
           <div className="relative h-48 overflow-hidden rounded-t-lg">
@@ -365,9 +410,41 @@ export function ListingCard({ listing, className = "", isFavorited: initialFavor
 
         {/* Availability badge */}
         <div className="absolute top-2 left-2">
-          <Badge variant={listing.isAvailable ? "default" : "secondary"}>
-            {listing.isAvailable ? 'Available' : 'Not Available'}
-          </Badge>
+          {availability.loading ? (
+            <Badge variant="secondary" className="animate-pulse">
+              Checking...
+            </Badge>
+          ) : (
+            <Badge 
+              variant={(() => {
+                if (!availability.availableFrom) return "default";
+                const availableDate = new Date(availability.availableFrom);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                availableDate.setHours(0, 0, 0, 0);
+                return availableDate <= today ? "default" : "destructive";
+              })()}
+              className={(() => {
+                if (!availability.availableFrom) return "bg-green-600";
+                const availableDate = new Date(availability.availableFrom);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                availableDate.setHours(0, 0, 0, 0);
+                return availableDate <= today ? "bg-green-600" : "bg-gray-500";
+              })()}
+            >
+              {(() => {
+                if (!availability.availableFrom) return "Available Now";
+                const availableDate = new Date(availability.availableFrom);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                availableDate.setHours(0, 0, 0, 0);
+                return availableDate <= today 
+                  ? "Available Now" 
+                  : `Available from ${availableDate.toLocaleDateString()}`;
+              })()}
+            </Badge>
+          )}
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, redirect } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { 
   Send, 
-  ArrowLeft, 
-  Phone, 
-  Video, 
-  MoreVertical,
+  ArrowLeft,
   Paperclip,
   Smile,
   MessageCircle
@@ -29,6 +26,12 @@ interface Message {
   senderAvatar?: string;
   createdAt: string;
   isRead: boolean;
+  type?: 'TEXT' | 'IMAGE' | 'FILE';
+  metadata?: {
+    fileUrl?: string;
+    fileName?: string;
+    fileType?: string;
+  };
 }
 
 interface ChatThread {
@@ -54,6 +57,10 @@ export default function ChatThreadPage() {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
 
 
@@ -118,33 +125,99 @@ export default function ChatThreadPage() {
     loadChatData();
   }, [session, status, chatId]);
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setPreviewUrl(event.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  };
+
+  const handleEmojiClick = (emoji: string) => {
+    setNewMessage(prev => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
   const sendMessage = async () => {
-    if (!newMessage.trim() || isSending) return;
+    if ((!newMessage.trim() && !selectedFile) || isSending) return;
 
     try {
       setIsSending(true);
       
+      let fileUrl: string | undefined;
+      let fileName: string | undefined;
+      let fileType: string | undefined;
+      let messageType: 'TEXT' | 'IMAGE' | 'FILE' = 'TEXT';
+
+      // Upload file if selected
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('threadId', chatId);
+
+        try {
+          const uploadResponse = await fetch('/api/chat/upload', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (uploadResponse.ok) {
+            const uploadData = await uploadResponse.json();
+            fileUrl = uploadData.data.fileUrl;
+            fileName = uploadData.data.fileName;
+            fileType = uploadData.data.fileType;
+            messageType = selectedFile.type.startsWith('image/') ? 'IMAGE' : 'FILE';
+          } else {
+            throw new Error('Upload failed');
+          }
+        } catch (error) {
+          console.error('Error uploading file:', error);
+          alert('Failed to upload file. Please try again.');
+          setIsSending(false);
+          return;
+        }
+      }
+
       // Create optimistic message
       const optimisticMessage: Message = {
         id: `temp-${Date.now()}`,
-        content: newMessage,
+        content: newMessage || (selectedFile ? `📎 ${selectedFile.name}` : ''),
         senderId: session?.user.id || 'current-user',
         senderName: session?.user.name || 'You',
         senderAvatar: session?.user.image || undefined,
         createdAt: new Date().toISOString(),
-        isRead: false
+        isRead: false,
+        type: messageType,
+        metadata: fileUrl ? { fileUrl, fileName, fileType } : undefined
       };
 
       // Add message optimistically
       setMessages(prev => [...prev, optimisticMessage]);
       const messageContent = newMessage;
       setNewMessage('');
+      setSelectedFile(null);
+      setPreviewUrl(null);
 
       // Send message to API
       const response = await fetch(`/api/chat/threads/${chatId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: messageContent })
+        body: JSON.stringify({
+          content: messageContent,
+          type: messageType,
+          metadata: fileUrl ? { fileUrl, fileName, fileType } : undefined
+        })
       });
       
       if (response.ok) {
@@ -197,7 +270,7 @@ export default function ChatThreadPage() {
 
   return (
      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="container mx-auto p-6">
       {/* Chat Header */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-xl rounded-t-2xl">
         <div className="p-6">
@@ -229,7 +302,7 @@ export default function ChatThreadPage() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 rounded-xl h-10 w-10">
+              {/* <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 rounded-xl h-10 w-10">
                 <Phone className="h-5 w-5" />
               </Button>
               <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 rounded-xl h-10 w-10">
@@ -237,7 +310,7 @@ export default function ChatThreadPage() {
               </Button>
               <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 rounded-xl h-10 w-10">
                 <MoreVertical className="h-5 w-5" />
-              </Button>
+              </Button> */}
             </div>
           </div>
         </div>
@@ -277,7 +350,28 @@ export default function ChatThreadPage() {
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-md' 
                       : 'bg-white text-gray-800 border border-gray-100 rounded-bl-md'
                   }`}>
-                    <p className="text-sm leading-relaxed break-words">{message.content}</p>
+                    {message.type === 'IMAGE' && message.metadata?.fileUrl ? (
+                      <div className="max-w-xs">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={message.metadata.fileUrl}
+                          alt="Shared image"
+                          className="rounded-lg max-h-64 w-full object-cover"
+                        />
+                        {message.content && <p className="text-sm mt-2 leading-relaxed break-words">{message.content}</p>}
+                      </div>
+                    ) : message.type === 'FILE' && message.metadata?.fileUrl ? (
+                      <a
+                        href={message.metadata.fileUrl}
+                        download={message.metadata.fileName}
+                        className={`inline-flex items-center gap-2 ${isCurrentUser ? 'text-white' : 'text-blue-600'} hover:underline`}
+                      >
+                        <Paperclip className="h-4 w-4" />
+                        <span className="text-sm">{message.metadata.fileName || 'Download file'}</span>
+                      </a>
+                    ) : (
+                      <p className="text-sm leading-relaxed break-words">{message.content}</p>
+                    )}
                   </div>
                   <p className={`text-xs mt-1 transition-opacity opacity-0 group-hover:opacity-100 ${
                     isCurrentUser 
@@ -291,15 +385,46 @@ export default function ChatThreadPage() {
             </div>
           );
         }))}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Message Input */}
       <div className="bg-white shadow-2xl rounded-b-2xl border-t">
         <div className="p-6">
+          {/* File preview */}
+          {previewUrl && (
+            <div className="mb-4 relative">
+              <div className="inline-block relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={previewUrl} alt="Preview" className="max-h-48 rounded-lg" />
+                <button
+                  onClick={() => {
+                    setPreviewUrl(null);
+                    setSelectedFile(null);
+                  }}
+                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+          
           <div className="flex items-center space-x-4 max-w-4xl mx-auto">
-            <Button variant="ghost" size="sm" className="hover:bg-gray-100 rounded-xl h-12 w-12">
-              <Paperclip className="h-5 w-5 text-gray-400" />
-            </Button>
+            <div className="relative">
+              <input
+                type="file"
+                id="file-input"
+                onChange={handleFileSelect}
+                className="hidden"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+              />
+              <label htmlFor="file-input" className="inline-block">
+                <div className="hover:bg-gray-100 rounded-xl h-12 w-12 p-0 flex items-center justify-center cursor-pointer">
+                  <Paperclip className="h-5 w-5 text-gray-400" />
+                </div>
+              </label>
+            </div>
             <div className="flex-1 relative">
               <Input
                 value={newMessage}
@@ -309,19 +434,39 @@ export default function ChatThreadPage() {
                 className="h-12 px-6 pr-14 text-base rounded-2xl border-2 border-gray-200 focus:border-blue-500 focus:ring-0 transition-all bg-gray-50 focus:bg-white"
                 disabled={isSending}
               />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 hover:bg-gray-200 rounded-xl h-8 w-8"
-              >
-                <Smile className="h-4 w-4 text-gray-500" />
-              </Button>
+              <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                <div className="relative group">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className="hover:bg-gray-200 rounded-xl h-8 w-8"
+                  >
+                    <Smile className="h-4 w-4 text-gray-500" />
+                  </Button>
+                  
+                  {/* Emoji Picker */}
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-12 right-0 bg-white border border-gray-200 rounded-lg p-3 shadow-lg z-50 grid grid-cols-6 gap-2 w-60">
+                      {['😀', '😂', '😍', '🤔', '😢', '🎉', '👍', '👎', '❤️', '💯', '🔥', '✨', '📸', '🎵', '🎬', '⚡'].map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleEmojiClick(emoji)}
+                          className="text-xl hover:bg-gray-100 p-2 rounded cursor-pointer"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <Button 
               onClick={sendMessage} 
-              disabled={!newMessage.trim() || isSending}
+              disabled={(!newMessage.trim() && !selectedFile) || isSending}
               className={`rounded-2xl h-12 w-12 p-0 transition-all duration-200 ${
-                !newMessage.trim() || isSending
+                (!newMessage.trim() && !selectedFile) || isSending
                   ? 'bg-gray-300 cursor-not-allowed' 
                   : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:scale-105'
               }`}

@@ -34,7 +34,9 @@ export async function GET(
               select: {
                 id: true,
                 name: true,
-                role: true
+                role: true,
+                email: true,
+                profilePicture: true
               }
             }
           }
@@ -51,9 +53,15 @@ export async function GET(
       content: message.content,
       senderId: message.sender.userId,
       senderName: message.sender.user.name,
-      senderAvatar: undefined,
+      senderAvatar: message.sender.user.profilePicture || (
+        message.sender.user.email 
+          ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(message.sender.user.email)}`
+          : undefined
+      ),
       createdAt: message.createdAt,
-      isRead: message.readAt !== null
+      isRead: message.readAt !== null,
+      type: message.type || 'TEXT',
+      metadata: message.metadata || undefined
     }));
 
     return successResponse(transformedMessages);
@@ -74,9 +82,9 @@ export async function POST(
   try {
     const session = await requireAuth(request);
     const { id: threadId } = await params;
-    const { content } = await request.json();
+    const { content, type = 'TEXT', metadata } = await request.json();
 
-    if (!content || content.trim().length === 0) {
+    if (!content && type === 'TEXT') {
       return errorResponse(new ApiErrorClass('Message content is required', 'VALIDATION_ERROR', 400));
     }
 
@@ -97,7 +105,9 @@ export async function POST(
       data: {
         threadId: threadId,
         senderId: participant.id,
-        content: content.trim()
+        content: content?.trim() || '',
+        type: type || 'TEXT',
+        metadata: metadata || null
       },
       include: {
         sender: {
@@ -106,7 +116,8 @@ export async function POST(
               select: {
                 id: true,
                 name: true,
-                role: true
+                role: true,
+                email: true
               }
             }
           }
@@ -129,9 +140,13 @@ export async function POST(
       content: message.content,
       senderId: message.sender.userId,
       senderName: message.sender.user.name,
-      senderAvatar: undefined,
+      senderAvatar: message.sender.user.email 
+        ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(message.sender.user.email)}`
+        : undefined,
       createdAt: message.createdAt,
-      isRead: false
+      isRead: false,
+      type: message.type || 'TEXT',
+      metadata: message.metadata || undefined
     };
 
     return successResponse(transformedMessage, 201);
