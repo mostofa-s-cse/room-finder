@@ -73,7 +73,6 @@ interface Listing {
   totalBaths: number;
   area: number;
   avgRating: number;
-  reviewCount: number;
   landlord: {
     id: string;
     name: string;
@@ -91,6 +90,9 @@ interface Listing {
       name: string;
     } | null;
   }>;
+  _count: {
+    reviews: number;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -105,6 +107,8 @@ export default function RoomDetailsPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [hasBooked, setHasBooked] = useState(false);
+  const [checkingBooking, setCheckingBooking] = useState(false);
   const { isFavorited, toggleFavorite, loading: favoritesLoading } = useFavorites();
 
   // Check if room is available based on listing flag and availableFrom date
@@ -203,6 +207,27 @@ export default function RoomDetailsPage() {
 
         const data = await response.json();
         setListing(data.data);
+
+        // Check if user has already booked this listing
+        if (session) {
+          setCheckingBooking(true);
+          try {
+            const bookingResponse = await fetch(`/api/bookings?limit=100`);
+            if (bookingResponse.ok) {
+              const bookingData = await bookingResponse.json();
+              const userBookings = bookingData.data || [];
+              const hasExistingBooking = userBookings.some(
+                (booking: { listing: { id: string }; status: string }) => booking.listing.id === params?.id && 
+                (booking.status === 'PENDING' || booking.status === 'CONFIRMED')
+              );
+              setHasBooked(hasExistingBooking);
+            }
+          } catch (err) {
+            console.error('Failed to check booking status:', err);
+          } finally {
+            setCheckingBooking(false);
+          }
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
@@ -211,7 +236,7 @@ export default function RoomDetailsPage() {
     };
 
     fetchListing();
-  }, [params?.id]);
+  }, [params?.id, session]);
 
   const handleBooking = () => {
     if (!session) {
@@ -594,7 +619,7 @@ export default function RoomDetailsPage() {
                       <div className="flex items-center mt-2">
                         <RatingStars rating={listing.avgRating} size="sm" />
                         <span className="ml-2 text-sm text-gray-600">
-                          ({listing.reviewCount} reviews)
+                          ({listing._count.reviews} reviews)
                         </span>
                       </div>
                     )}
@@ -686,7 +711,7 @@ export default function RoomDetailsPage() {
             {/* Reviews */}
             <Card>
               <CardHeader>
-                <CardTitle>Reviews ({listing.reviewCount || 0})</CardTitle>
+                <CardTitle>Reviews ({listing._count.reviews})</CardTitle>
               </CardHeader>
               <CardContent>
                 {listing.reviews.length > 0 ? (
@@ -741,19 +766,38 @@ export default function RoomDetailsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
-                  <Button 
-                    onClick={handleBooking}
-                    disabled={!isRoomAvailable()}
-                    className="w-full"
-                    size="lg"
-                    variant={!isRoomAvailable() ? "secondary" : "default"}
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    Book Now
-                  </Button>
+                  {hasBooked ? (
+                    <Button 
+                      disabled
+                      className="w-full"
+                      size="lg"
+                      variant="secondary"
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      Already Booked
+                    </Button>
+                  ) : (
+                    <Button 
+                      onClick={handleBooking}
+                      disabled={!isRoomAvailable() || checkingBooking}
+                      className="w-full"
+                      size="lg"
+                      variant={!isRoomAvailable() ? "secondary" : "default"}
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      Book Now
+                    </Button>
+                  )}
+                  
+                  {/* Show already booked message */}
+                  {hasBooked && (
+                    <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-md border border-blue-200">
+                      <p>You already have an active booking for this room. Visit your dashboard to manage it.</p>
+                    </div>
+                  )}
                   
                   {/* Show helpful message when unavailable */}
-                  {!isRoomAvailable() && (
+                  {!isRoomAvailable() && !hasBooked && (
                     <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">
                       {listing.isAvailable === false ? (
                         <p>This room is currently unavailable. You can contact the landlord or send a tenant request to be notified.</p>
