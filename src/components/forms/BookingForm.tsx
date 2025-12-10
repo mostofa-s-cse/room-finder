@@ -7,9 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { format, addDays, isAfter, startOfDay, parseISO } from 'date-fns';
-import { CalendarIcon, AlertCircle, Clock } from 'lucide-react';
+import { CalendarIcon, AlertCircle, Clock, CreditCard, Smartphone, Banknote } from 'lucide-react';
 import { useBookingAvailability, validateBookingDates, calculateBookingDuration } from '@/hooks/useBookingAvailability';
 import { toast } from 'react-hot-toast';
+import { useSSLCommerz } from '@/hooks/usePayments';
+import { useSession } from 'next-auth/react';
+import { PaymentRequest } from '@/lib/payments/types';
 
 interface BookingConflict {
   id: string;
@@ -42,13 +45,42 @@ interface BookingFormProps {
 }
 
 export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingFormProps) {
+  const { data: session } = useSession();
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
   const [guestCount, setGuestCount] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'mobile' | 'cash'>('card');
+  const [customerInfo, setCustomerInfo] = useState({
+    name: session?.user?.name || '',
+    email: session?.user?.email || '',
+    phone: '',
+    address: ''
+  });
   
   const { checkAvailability, isLoading: checkingAvailability } = useBookingAvailability();
+  
+  const { initializePayment, isProcessing: isProcessingPayment } = useSSLCommerz({
+    onSuccess: (validation) => {
+      toast.success('Payment completed successfully!');
+      onBookingSuccess?.({
+        id: validation.transactionId,
+        listingId: listing.id,
+        startDate: startDate!.toISOString(),
+        endDate: endDate!.toISOString(),
+        amount: calculateTotalAmount(),
+        status: 'CONFIRMED'
+      });
+    },
+    onError: (error) => {
+      toast.error(`Payment failed: ${error.message}`);
+      setErrors({ payment: error.message });
+    },
+    onCancel: () => {
+      toast.error('Payment was cancelled');
+    }
+  });
 
   // Calculate minimum date (available from date or today) using date-fns
   const minDate = React.useMemo(() => {
@@ -144,8 +176,22 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Require authenticated user before proceeding to payment
+    if (!session?.user?.id || !session.user.email) {
+      toast.error('Please sign in to complete the booking');
+      setErrors({ auth: 'Please sign in to continue' });
+      return;
+    }
+
     if (!startDate || !endDate) {
       setErrors({ dates: 'Please select start and end dates' });
+      return;
+    }
+
+    // Validate customer info
+    if (!customerInfo.name || !customerInfo.email || !customerInfo.phone) {
+      setErrors({ customer: 'Please fill in all customer information' });
+      toast.error('Please fill in all required fields');
       return;
     }
 
@@ -168,7 +214,8 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
     try {
       const totalAmount = calculateTotalAmount();
       
-      const response = await fetch('/api/bookings', {
+      // Step 1: Create booking
+      const bookingResponse = await fetch('/api/bookings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -182,25 +229,44 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
         }),
       });
 
-      const data = await response.json();
+      const bookingData = await bookingResponse.json();
 
-      if (!response.ok) {
-        if (response.status === 409 && data.conflicts) {
+      if (!bookingResponse.ok) {
+        if (bookingResponse.status === 409 && bookingData.error?.details?.conflicts) {
           // Booking conflict
-          const conflictList = data.conflicts
+          const conflictList = bookingData.error.details.conflicts
             .map((c: BookingConflict) => `${format(new Date(c.startDate), 'MMM dd')} - ${format(new Date(c.endDate), 'MMM dd')}`)
             .join(', ');
           setErrors({ 
             dates: `Booking conflict detected: ${conflictList}. Please choose different dates.` 
           });
         } else {
-          throw new Error(data.error || 'Failed to create booking');
+          throw new Error(bookingData.error?.message || 'Failed to create booking');
         }
         return;
       }
 
-      toast.success('Booking created successfully!');
-      onBookingSuccess?.(data.booking);
+      // Step 2: Initialize payment
+      const paymentRequest: PaymentRequest = {
+        amount: totalAmount,
+        currency: 'BDT',
+        customerName: customerInfo.name,
+        customerEmail: customerInfo.email,
+        customerPhone: customerInfo.phone,
+        customerAddress: customerInfo.address || 'N/A',
+        productName: listing.title,
+        productDescription: `Booking from ${format(startDate, 'MMM dd, yyyy')} to ${format(endDate, 'MMM dd, yyyy')}`,
+        bookingId: bookingData.data.id,
+        userId: session.user.id,
+        listingId: listing.id,
+        successUrl: `${window.location.origin}/payment/success?bookingId=${bookingData.data.id}`,
+        cancelUrl: `${window.location.origin}/payment/cancel?bookingId=${bookingData.data.id}`,
+        failUrl: `${window.location.origin}/payment/fail?bookingId=${bookingData.data.id}`,
+      };
+
+      // Initialize payment and redirect to payment gateway
+      await initializePayment(paymentRequest);
+      
     } catch (error) {
       console.error('Booking error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to create booking';
@@ -215,15 +281,16 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
   const totalAmount = calculateTotalAmount();
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
+    <Card className="w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+      <CardHeader className="flex-shrink-0 border-b">
         <CardTitle className="flex items-center gap-2">
           <CalendarIcon className="h-5 w-5" />
           Book This Room
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="flex-1 overflow-y-auto">
+        <CardContent className="pt-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
           {/* Date Selection */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -312,6 +379,157 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
             </div>
           )}
 
+          {/* Customer Information */}
+          <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+            <h3 className="font-semibold text-sm text-gray-900">Customer Information</h3>
+            
+            <div className="space-y-2">
+              <Label htmlFor="customer-name">Full Name *</Label>
+              <Input
+                id="customer-name"
+                type="text"
+                value={customerInfo.name}
+                onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Enter your full name"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="customer-email">Email Address *</Label>
+              <Input
+                id="customer-email"
+                type="email"
+                value={customerInfo.email}
+                onChange={(e) => setCustomerInfo(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="your@email.com"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="customer-phone">Phone Number *</Label>
+              <Input
+                id="customer-phone"
+                type="tel"
+                value={customerInfo.phone}
+                onChange={(e) => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
+                placeholder="+880 1XXXXXXXXX"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="customer-address">Address (Optional)</Label>
+              <Input
+                id="customer-address"
+                type="text"
+                value={customerInfo.address}
+                onChange={(e) => setCustomerInfo(prev => ({ ...prev, address: e.target.value }))}
+                placeholder="Your address"
+              />
+            </div>
+          </div>
+
+          {/* Payment Method Selection */}
+          <div className="space-y-3">
+            <Label>Select Payment Method</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {/* Card & Bank Button */}
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('card')}
+                className={`flex flex-col items-center justify-center p-3 border-2 rounded-lg transition-all ${
+                  paymentMethod === 'card'
+                    ? 'border-blue-600 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <CreditCard className={`h-6 w-6 mb-1 ${paymentMethod === 'card' ? 'text-blue-600' : 'text-gray-600'}`} />
+                <span className={`text-xs font-medium ${paymentMethod === 'card' ? 'text-blue-600' : 'text-gray-600'}`}>
+                  Card & Bank
+                </span>
+              </button>
+
+              {/* Mobile Banking Button */}
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('mobile')}
+                className={`flex flex-col items-center justify-center p-3 border-2 rounded-lg transition-all ${
+                  paymentMethod === 'mobile'
+                    ? 'border-green-600 bg-green-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <Smartphone className={`h-6 w-6 mb-1 ${paymentMethod === 'mobile' ? 'text-green-600' : 'text-gray-600'}`} />
+                <span className={`text-xs font-medium ${paymentMethod === 'mobile' ? 'text-green-600' : 'text-gray-600'}`}>
+                  Mobile
+                </span>
+              </button>
+
+              {/* Cash Button */}
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('cash')}
+                className={`flex flex-col items-center justify-center p-3 border-2 rounded-lg transition-all ${
+                  paymentMethod === 'cash'
+                    ? 'border-purple-600 bg-purple-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <Banknote className={`h-6 w-6 mb-1 ${paymentMethod === 'cash' ? 'text-purple-600' : 'text-gray-600'}`} />
+                <span className={`text-xs font-medium ${paymentMethod === 'cash' ? 'text-purple-600' : 'text-gray-600'}`}>
+                  Cash
+                </span>
+              </button>
+            </div>
+
+            {/* Payment method details - Shows based on selection */}
+            {paymentMethod === 'card' && (
+              <div className="text-xs text-gray-600 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <p className="font-semibold text-blue-900 mb-2">💳 Card & Internet Banking</p>
+                <ul className="space-y-1 text-blue-800">
+                  <li>✓ Visa, Mastercard, American Express</li>
+                  <li>✓ All major banks in Bangladesh</li>
+                  <li>✓ Instant confirmation</li>
+                  <li>✓ 256-bit secure encryption</li>
+                </ul>
+              </div>
+            )}
+
+            {paymentMethod === 'mobile' && (
+              <div className="text-xs text-gray-600 bg-green-50 p-4 rounded-lg border border-green-200">
+                <p className="font-semibold text-green-900 mb-2">📱 Mobile Banking</p>
+                <ul className="space-y-1 text-green-800">
+                  <li>✓ bKash</li>
+                  <li>✓ Nagad</li>
+                  <li>✓ Rocket</li>
+                  <li>✓ Instant payment & confirmation</li>
+                </ul>
+              </div>
+            )}
+
+            {paymentMethod === 'cash' && (
+              <div className="text-xs text-gray-600 bg-gray-50 p-4 rounded-lg border border-gray-300">
+                <p className="font-semibold text-gray-900 mb-2">💵 Cash on Arrival</p>
+                <ul className="space-y-1 text-gray-700">
+                  <li>✓ Pay when room viewing</li>
+                  <li>✓ No online payment needed</li>
+                  <li>✓ Direct verification</li>
+                  <li className="text-orange-600 font-medium">⚠️ Availability confirmation required</li>
+                </ul>
+              </div>
+            )}
+
+            {/* SSLCommerz badge */}
+            <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+              </svg>
+              <span>Secured by SSLCommerz</span>
+            </div>
+          </div>
+
           {/* Action Buttons */}
           <div className="flex gap-2">
             {onCancel && (
@@ -321,16 +539,19 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
             )}
             <Button 
               type="submit" 
-              disabled={!isAvailableNow || isSubmitting || Object.keys(errors).length > 0}
-              className="flex-1"
+              disabled={!isAvailableNow || isSubmitting || isProcessingPayment || Object.keys(errors).length > 0}
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
             >
-              {isSubmitting ? (
+              {isSubmitting || isProcessingPayment ? (
                 <>
                   <LoadingSpinner className="mr-2 h-4 w-4" />
-                  Booking...
+                  {isProcessingPayment ? 'Processing Payment...' : 'Creating Booking...'}
                 </>
               ) : (
-                'Book Now'
+                <>
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Proceed to Payment
+                </>
               )}
             </Button>
           </div>
@@ -348,8 +569,9 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
               Currently unavailable for booking
             </Badge>
           )}
-        </form>
-      </CardContent>
+          </form>
+        </CardContent>
+      </div>
     </Card>
   );
 }

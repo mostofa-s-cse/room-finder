@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ListingCard } from '@/components/ui/ListingCard';
+import { PendingPaymentsSection } from '@/components/dashboard/PendingPaymentsSection';
 import { 
   User, 
   Heart, 
@@ -630,6 +631,25 @@ function BachelorDashboardContent() {
               <p className="text-muted-foreground">Manage your room bookings</p>
             </div>
           </div>
+
+          {/* Pending Payments Section */}
+          {Array.isArray(bookings) && bookings.some(b => b.status === 'PENDING') && (
+            <div className="space-y-4">
+              <PendingPaymentsSection
+                bookings={bookings}
+                onRetrySuccess={(bookingId) => {
+                  // Refresh bookings after successful retry
+                  setBookings(prev =>
+                    prev.map(b =>
+                      b.id === bookingId ? { ...b, status: 'CONFIRMED' } : b
+                    )
+                  );
+                }}
+              />
+            </div>
+          )}
+
+          {/* All Bookings */}
           <div className="space-y-4">
             {Array.isArray(bookings) && bookings.map((booking) => (
               <Card key={booking.id}>

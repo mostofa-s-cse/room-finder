@@ -241,11 +241,9 @@ export class PaymentService {
           }
         });
 
-        // Update booking status
-        await prisma.booking.update({
-          where: { id: payment.bookingId },
-          data: { status: 'CANCELLED' }
-        });
+        // Keep booking in PENDING status to allow retry
+        // Don't cancel the booking - user can retry payment
+        // Only update the payment status to FAILED
 
         // Send failure notification
         await this.sendPaymentNotifications(payment, 'FAILED');

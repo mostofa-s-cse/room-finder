@@ -71,8 +71,10 @@ export class SSLCommerzService {
   private isLive: boolean;
 
   constructor() {
+    // Support both env var names to match existing .env files and docs
     this.storeId = process.env.SSLCOMMERZ_STORE_ID || '';
-    this.storePassword = process.env.SSLCOMMERZ_STORE_PASSWORD || '';
+    this.storePassword =
+      process.env.SSLCOMMERZ_STORE_PASSWORD || process.env.SSLCOMMERZ_STORE_PASS || '';
     this.isLive = process.env.NODE_ENV === 'production';
 
     // Initialize SSLCommerz only if credentials are available
@@ -83,7 +85,7 @@ export class SSLCommerzService {
 
   private validateConfiguration(): void {
     if (!this.storeId || !this.storePassword) {
-      throw new Error('SSLCommerz credentials not configured');
+      throw new Error('SSLCommerz credentials not configured. Set SSLCOMMERZ_STORE_ID and SSLCOMMERZ_STORE_PASSWORD (or SSLCOMMERZ_STORE_PASS).');
     }
     if (!this.sslcz) {
       throw new Error('SSLCommerz service not initialized');
