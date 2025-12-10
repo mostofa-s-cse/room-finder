@@ -48,7 +48,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       _count: {
         select: {
           bookings: true,
-          reviews: true
+          reviews: true,
+          favoritedBy: true
         }
       }
     },
@@ -69,8 +70,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         return sum + (listing.price * days);
       }, 0);
     
+    // Check if listing is available (published and no active blocks)
+    const isAvailable = listing.isPublished && (!listing.availableFrom || new Date(listing.availableFrom) <= new Date());
+    
     return {
       ...listing,
+      rent: listing.price,
+      isAvailable,
+      views: 0, // Could be enhanced with analytics
+      favorites: listing._count?.favoritedBy || 0,
+      bookings: listing._count?.bookings || 0,
+      rating: Math.round(averageRating * 10) / 10,
       averageRating: Math.round(averageRating * 10) / 10,
       totalReviews: listing.reviews.length,
       totalEarnings,

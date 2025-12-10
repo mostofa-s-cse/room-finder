@@ -839,11 +839,18 @@ export default function LandlordDashboard() {
                         <Building className="h-12 w-12 text-muted-foreground" />
                       </div>
                     )}
-                    <Badge 
-                      className={`${getAvailabilityColor(listing.isAvailable)} absolute top-2 left-2`}
-                    >
-                      {listing.isAvailable ? 'Available' : 'Unavailable'}
-                    </Badge>
+                    <div className="absolute top-2 left-2 flex flex-col space-y-1">
+                      <Badge 
+                        className={getAvailabilityColor(listing.isAvailable)}
+                      >
+                        {listing.isAvailable ? '🟢 Available' : '🔘 Unavailable'}
+                      </Badge>
+                      {listing.bookings > 0 && (
+                        <Badge className="bg-blue-100 text-blue-800">
+                          📊 {listing.bookings} {listing.bookings === 1 ? 'Booking' : 'Bookings'}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <div className="p-4 space-y-3">
                     <div>
@@ -1376,21 +1383,23 @@ export default function LandlordDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {financialData?.recentTransactions?.slice(0, 10).map((transaction) => (
-                  <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">{transaction.tenant}</h4>
-                      <p className="text-sm text-muted-foreground">{transaction.listing}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</p>
+                {financialData?.recentTransactions && financialData.recentTransactions.length > 0 ? (
+                  financialData.recentTransactions.slice(0, 10).map((transaction) => (
+                    <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div>
+                        <h4 className="font-medium">{transaction.tenant}</h4>
+                        <p className="text-sm text-muted-foreground">{transaction.listing}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(transaction.date).toLocaleDateString()}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-green-600">+৳{transaction.amount?.toLocaleString()}</p>
+                        <Badge className={getStatusColor(transaction.status)}>
+                          {transaction.status}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-green-600">+৳{transaction.amount?.toLocaleString()}</p>
-                      <Badge className={getStatusColor(transaction.status)}>
-                        {transaction.status}
-                      </Badge>
-                    </div>
-                  </div>
-                )) || (
+                  ))
+                ) : (
                   <p className="text-center text-muted-foreground py-8">
                     No transactions yet.
                   </p>

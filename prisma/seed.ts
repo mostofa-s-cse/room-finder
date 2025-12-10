@@ -120,7 +120,7 @@ async function main() {
       passwordHash: adminPassword,
       role: UserRole.ADMIN,
       phone: '+8801700000000',
-      profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin@roomfinder.com'
+      profilePicture: '/avatar.png'
     }
   });
 
@@ -138,7 +138,7 @@ async function main() {
         income: 40000,
         affordablePrice: 12000,
         transportMode: TransportMode.BUS,
-        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=ahmed@example.com'
+        profilePicture: '/avatar.png'
       }
     }),
     prisma.user.create({
@@ -151,7 +151,7 @@ async function main() {
         income: 60000,
         affordablePrice: 18000,
         transportMode: TransportMode.BIKE,
-        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=ali@example.com'
+        profilePicture: '/avatar.png'
       }
     }),
     prisma.user.create({
@@ -164,7 +164,7 @@ async function main() {
         income: 30000,
         affordablePrice: 9000,
         transportMode: TransportMode.WALK,
-        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rafiul@example.com'
+        profilePicture: '/avatar.png'
       }
     })
   ]);
@@ -180,7 +180,7 @@ async function main() {
         passwordHash: landlordPassword,
         role: UserRole.LANDLORD,
         phone: '+8801800000001',
-        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=karim@example.com'
+        profilePicture: '/avatar.png'
       }
     }),
     prisma.user.create({
@@ -190,7 +190,7 @@ async function main() {
         passwordHash: landlordPassword,
         role: UserRole.LANDLORD,
         phone: '+8801800000002',
-        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=fatema@example.com'
+        profilePicture: '/avatar.png'
       }
     }),
     prisma.user.create({
@@ -200,7 +200,7 @@ async function main() {
         passwordHash: landlordPassword,
         role: UserRole.LANDLORD,
         phone: '+8801800000003',
-        profilePicture: 'https://api.dicebear.com/7.x/avataaars/svg?seed=rahim@example.com'
+        profilePicture: '/avatar.png'
       }
     })
   ]);

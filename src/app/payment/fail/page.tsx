@@ -144,7 +144,7 @@ function PaymentFailContent() {
           </Link>
           
           <Link
-            href="/dashboard"
+            href="/dashboard/bachelor"
             className="w-full flex justify-center py-3 px-4 text-sm font-medium text-blue-600 hover:text-blue-500 transition-colors"
           >
             Go to Dashboard

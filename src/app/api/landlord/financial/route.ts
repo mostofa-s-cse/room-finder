@@ -14,9 +14,9 @@ export async function GET(request: NextRequest) {
         listing: {
           landlordId: session.user.id,
         },
-        status: {
-          in: ['CONFIRMED', 'COMPLETED'],
-        },
+          status: {
+            in: ['CONFIRMED', 'PAID', 'COMPLETED'],
+          },
       },
       select: {
         id: true,
@@ -86,6 +86,8 @@ export async function GET(request: NextRequest) {
       monthlyRevenue,
       totalBookings,
       monthlyData,
+      averageRent: totalBookings > 0 ? Math.round(totalRevenue / totalBookings) : 0,
+      occupancyRate: totalBookings > 0 ? (totalBookings / 30) * 100 : 0, // Estimated based on bookings
       recentTransactions: bookings.slice(0, 10).map(booking => ({
         id: booking.id,
         amount: booking.totalAmount,

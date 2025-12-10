@@ -301,9 +301,21 @@ function BachelorDashboardContent() {
       case 'PENDING': return 'bg-yellow-100 text-yellow-800';
       case 'CANCELLED': return 'bg-red-100 text-red-800';
       case 'COMPLETED': return 'bg-blue-100 text-blue-800';
+      case 'PAID': return 'bg-emerald-100 text-emerald-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  const pendingPayments = Array.isArray(bookings)
+    ? bookings.filter((b) => b.status === 'PENDING')
+    : [];
+  const completedPayments = Array.isArray(bookings)
+    ? bookings.filter((b) => ['CONFIRMED', 'COMPLETED', 'PAID'].includes(b.status))
+    : [];
+  const totalPaidAmount = completedPayments.reduce(
+    (sum, b) => sum + (b.totalAmount || 0),
+    0
+  );
 
   if (isLoading) {
     return (
@@ -387,11 +399,12 @@ function BachelorDashboardContent() {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
           <TabsTrigger value="favorites">Favorites</TabsTrigger>
           <TabsTrigger value="bookings">Bookings</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
           {/* <TabsTrigger value="requests">Requests</TabsTrigger> */}
           <TabsTrigger value="chats">Messages</TabsTrigger>
         </TabsList>
@@ -713,6 +726,88 @@ function BachelorDashboardContent() {
                     Find Rooms
                   </Button>
                 </Link>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Payments Tab */}
+        <TabsContent value="payments" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Payments</h2>
+              <p className="text-muted-foreground">Track your payment status and history</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-muted-foreground">Pending payments</p>
+                <p className="text-2xl font-bold">{pendingPayments.length}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-muted-foreground">Completed payments</p>
+                <p className="text-2xl font-bold">{completedPayments.length}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-muted-foreground">Total paid</p>
+                <p className="text-2xl font-bold">৳{totalPaidAmount.toLocaleString()}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Pending Payments */}
+          {pendingPayments.length > 0 && (
+            <PendingPaymentsSection
+              bookings={bookings}
+              onRetrySuccess={(bookingId) => {
+                setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'CONFIRMED' } : b));
+              }}
+            />
+          )}
+
+          {/* Payment History */}
+          <div className="space-y-3">
+            {Array.isArray(bookings) && bookings.length > 0 ? (
+              bookings.map((booking) => (
+                <Card key={booking.id}>
+                  <CardContent className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      {booking.listing.images.length > 0 && (
+                        <Image
+                          src={booking.listing.images[0]}
+                          alt={booking.listing.title}
+                          width={56}
+                          height={56}
+                          className="w-14 h-14 rounded-lg object-cover"
+                        />
+                      )}
+                      <div>
+                        <h4 className="font-semibold">{booking.listing.title}</h4>
+                        <p className="text-sm text-muted-foreground">{booking.listing.location}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right space-y-1">
+                      <Badge className={getStatusColor(booking.status)}>{booking.status}</Badge>
+                      <p className="font-semibold">৳{booking.totalAmount ? booking.totalAmount.toLocaleString() : 'N/A'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Created {new Date(booking.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No payments yet.</p>
               </div>
             )}
           </div>

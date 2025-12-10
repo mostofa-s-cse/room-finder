@@ -246,26 +246,63 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
         return;
       }
 
-      // Step 2: Initialize payment
-      const paymentRequest: PaymentRequest = {
-        amount: totalAmount,
-        currency: 'BDT',
-        customerName: customerInfo.name,
-        customerEmail: customerInfo.email,
-        customerPhone: customerInfo.phone,
-        customerAddress: customerInfo.address || 'N/A',
-        productName: listing.title,
-        productDescription: `Booking from ${format(startDate, 'MMM dd, yyyy')} to ${format(endDate, 'MMM dd, yyyy')}`,
-        bookingId: bookingData.data.id,
-        userId: session.user.id,
-        listingId: listing.id,
-        successUrl: `${window.location.origin}/payment/success?bookingId=${bookingData.data.id}`,
-        cancelUrl: `${window.location.origin}/payment/cancel?bookingId=${bookingData.data.id}`,
-        failUrl: `${window.location.origin}/payment/fail?bookingId=${bookingData.data.id}`,
-      };
+      // Step 2: Handle based on payment method
+      if (paymentMethod === 'cash') {
+        // For cash payment, mark as completed immediately and redirect to success
+        try {
+          const paymentCompleteResponse = await fetch(`/api/bookings/${bookingData.data.id}/retry-payment`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              paymentMethod: 'cash',
+            }),
+          });
 
-      // Initialize payment and redirect to payment gateway
-      await initializePayment(paymentRequest);
+          if (paymentCompleteResponse.ok) {
+            toast.success('Booking confirmed! Payment to be made on arrival.');
+            onBookingSuccess?.({
+              id: bookingData.data.id,
+              listingId: listing.id,
+              startDate: startDate.toISOString(),
+              endDate: endDate.toISOString(),
+              amount: totalAmount,
+              status: 'CONFIRMED'
+            });
+            // Redirect to success page
+            window.location.href = `/payment/success?bookingId=${bookingData.data.id}`;
+          } else {
+            throw new Error('Failed to confirm cash payment');
+          }
+        } catch (error) {
+          console.error('Cash payment confirmation error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Failed to confirm payment';
+          setErrors({ submit: errorMessage });
+          toast.error(errorMessage);
+        }
+      } else {
+        // For card and mobile, redirect to SSLCommerz
+        const paymentRequest: PaymentRequest = {
+          amount: totalAmount,
+          currency: 'BDT',
+          customerName: customerInfo.name,
+          customerEmail: customerInfo.email,
+          customerPhone: customerInfo.phone,
+          customerAddress: customerInfo.address || 'N/A',
+          productName: listing.title,
+          productDescription: `Booking from ${format(startDate, 'MMM dd, yyyy')} to ${format(endDate, 'MMM dd, yyyy')}`,
+          bookingId: bookingData.data.id,
+          userId: session.user.id,
+          listingId: listing.id,
+          successUrl: `${window.location.origin}/payment/success?bookingId=${bookingData.data.id}`,
+          cancelUrl: `${window.location.origin}/payment/cancel?bookingId=${bookingData.data.id}`,
+          failUrl: `${window.location.origin}/payment/fail?bookingId=${bookingData.data.id}`,
+        };
+
+        // Initialize payment and redirect to payment gateway
+        await initializePayment(paymentRequest);
+      }
       
     } catch (error) {
       console.error('Booking error:', error);
