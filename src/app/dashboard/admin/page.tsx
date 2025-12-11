@@ -168,6 +168,25 @@ export default function AdminDashboard() {
     isSaving: false,
   });
 
+  // Create user states
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [createUserData, setCreateUserData] = useState<{
+    name: string;
+    email: string;
+    password: string;
+    role: 'ADMIN' | 'BACHELOR' | 'LANDLORD';
+    status: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
+    phone: string;
+  }>({
+    name: '',
+    email: '',
+    password: '',
+    role: 'BACHELOR',
+    status: 'ACTIVE',
+    phone: '',
+  });
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+
 
 
   useEffect(() => {
@@ -567,6 +586,75 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleCreateUser = async () => {
+    // Validate required fields
+    if (!createUserData.name.trim()) {
+      alert('Name is required');
+      return;
+    }
+    if (!createUserData.email.trim()) {
+      alert('Email is required');
+      return;
+    }
+    if (!createUserData.password.trim()) {
+      alert('Password is required');
+      return;
+    }
+    if (createUserData.password.length < 6) {
+      alert('Password must be at least 6 characters');
+      return;
+    }
+
+    try {
+      console.log('Creating new user:', {
+        name: createUserData.name,
+        email: createUserData.email,
+        role: createUserData.role,
+        status: createUserData.status,
+      });
+
+      const response = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: createUserData.name,
+          email: createUserData.email,
+          password: createUserData.password,
+          role: createUserData.role,
+          status: createUserData.status,
+          phone: createUserData.phone || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('User created successfully:', result);
+        
+        // Reset form and close modal
+        setCreateUserData({
+          name: '',
+          email: '',
+          password: '',
+          role: 'BACHELOR',
+          status: 'ACTIVE',
+          phone: '',
+        });
+        setIsCreatingUser(false);
+        
+        // Refresh data to show new user
+        fetchAdminData();
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to create user' }));
+        const errorMessage = errorData.error || errorData.message || 'Failed to create user';
+        console.error('Failed to create user:', errorMessage);
+        alert(`Failed to create user: ${errorMessage}`);
+      }
+    } catch (error) {
+      console.error('Error creating user:', error);
+      alert(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const handleViewListing = async (listingId: string) => {
     try {
       const response = await fetch(`/api/listings/${listingId}`);
@@ -882,8 +970,11 @@ export default function AdminDashboard() {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => handleExportUsers()}>
+              <Button onClick={() => setIsCreatingUser(true)}>
                 <Users className="h-4 w-4 mr-2" />
+                Create User
+              </Button>
+              <Button variant="outline" onClick={() => handleExportUsers()}>
                 Export All Users
               </Button>
               <Button variant="outline" onClick={() => handleShowDateExport('users')}>
@@ -1897,6 +1988,177 @@ export default function AdminDashboard() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Create User Modal */}
+      {isCreatingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-xl font-bold">Create New User</h2>
+                  <p className="text-muted-foreground">Add a new user to the system</p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    setIsCreatingUser(false);
+                    setCreateUserData({
+                      name: '',
+                      email: '',
+                      password: '',
+                      role: 'BACHELOR',
+                      status: 'ACTIVE',
+                      phone: '',
+                    });
+                  }}
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Name and Email */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Name *</label>
+                    <Input 
+                      value={createUserData.name} 
+                      onChange={(e) => setCreateUserData({...createUserData, name: e.target.value})}
+                      placeholder="Enter full name"
+                      className="focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Email *</label>
+                    <Input 
+                      type="email"
+                      value={createUserData.email} 
+                      onChange={(e) => setCreateUserData({...createUserData, email: e.target.value})}
+                      placeholder="Enter email address"
+                      className="focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className="text-sm font-medium">Password *</label>
+                  <div className="relative">
+                    <Input 
+                      type={showCreatePassword ? 'text' : 'password'}
+                      value={createUserData.password} 
+                      onChange={(e) => setCreateUserData({...createUserData, password: e.target.value})}
+                      placeholder="Enter password (min 6 characters)"
+                      className="focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePassword(!showCreatePassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                    >
+                      {showCreatePassword ? (
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                        </svg>
+                      ) : (
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Minimum 6 characters required
+                  </p>
+                </div>
+
+                {/* Phone (optional) */}
+                <div>
+                  <label className="text-sm font-medium">Phone (Optional)</label>
+                  <Input 
+                    type="tel"
+                    value={createUserData.phone} 
+                    onChange={(e) => setCreateUserData({...createUserData, phone: e.target.value})}
+                    placeholder="Enter phone number"
+                    className="focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Role and Status */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Role / Type *</label>
+                    <select 
+                      value={createUserData.role}
+                      onChange={(e) => setCreateUserData({...createUserData, role: e.target.value as 'ADMIN' | 'BACHELOR' | 'LANDLORD'})}
+                      className="w-full mt-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="ADMIN">Admin</option>
+                      <option value="BACHELOR">Bachelor (Tenant)</option>
+                      <option value="LANDLORD">Landlord (Property Owner)</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Select user account type
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Status *</label>
+                    <select 
+                      value={createUserData.status}
+                      onChange={(e) => setCreateUserData({...createUserData, status: e.target.value as 'ACTIVE' | 'SUSPENDED' | 'BANNED'})}
+                      className="w-full mt-1 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="SUSPENDED">Suspended</option>
+                      <option value="BANNED">Banned</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Form Summary */}
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <h4 className="text-sm font-medium text-blue-800 mb-2">Creating:</h4>
+                  <div className="text-xs space-y-1 text-blue-700">
+                    <div><strong>Role:</strong> {createUserData.role === 'BACHELOR' ? 'Bachelor (Tenant)' : createUserData.role === 'LANDLORD' ? 'Landlord (Property Owner)' : 'Admin'}</div>
+                    <div><strong>Status:</strong> {createUserData.status}</div>
+                    {createUserData.name && <div><strong>Name:</strong> {createUserData.name}</div>}
+                    {createUserData.email && <div><strong>Email:</strong> {createUserData.email}</div>}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsCreatingUser(false);
+                      setCreateUserData({
+                        name: '',
+                        email: '',
+                        password: '',
+                        role: 'BACHELOR',
+                        status: 'ACTIVE',
+                        phone: '',
+                      });
+                    }}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleCreateUser}
+                    className="flex-1"
+                    disabled={!createUserData.name.trim() || !createUserData.email.trim() || !createUserData.password.trim()}
+                  >
+                    Create User
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
