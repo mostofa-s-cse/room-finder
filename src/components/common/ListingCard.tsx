@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { useIsFavorited } from '@/hooks/useFavorites';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,8 @@ import {
   Shield,
   Zap,
   Share2,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { cn, formatPrice, formatDate, formatDistance } from '@/utils/helpers';
 import { Listing, RoomType } from '@prisma/client';
@@ -58,9 +60,53 @@ export function ListingCard({
 }: ListingCardProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isSharing, setIsSharing] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(true);
   
   // Use the favorites hook for automatic checking and management
   const { isFavorited, toggleFavorite, loading: favoriteLoading } = useIsFavorited(listing.id);
+
+  // Check if listing is available right now
+  useEffect(() => {
+    const checkCurrentAvailability = async () => {
+      try {
+        // Check today's bookings
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const response = await fetch(
+          `/api/bookings/availability?listingId=${listing.id}&date=${today.toISOString().split('T')[0]}`
+        );
+        await response.json();
+        
+        // Check if listing is published
+        const isPublished = listing.isPublished === true;
+        
+        // Check if availableFrom date has passed
+        const availableFromDate = listing.availableFrom 
+          ? new Date(listing.availableFrom)
+          : null;
+        availableFromDate?.setHours(0, 0, 0, 0);
+        
+        const dateHasPassed = !availableFromDate || availableFromDate <= today;
+        
+        // Listing is available if:
+        // 1. It's published
+        // 2. Status is PENDING (available for booking)
+        // 3. The availableFrom date has passed
+        const available = isPublished && 
+                         listing.status === 'PENDING' && 
+                         dateHasPassed;
+        
+        setIsAvailable(available);
+      } catch (error) {
+        console.error('Error checking availability:', error);
+        // Fallback: consider available if published
+        setIsAvailable(listing.isPublished === true);
+      }
+    };
+
+    checkCurrentAvailability();
+  }, [listing.id, listing.isPublished, listing.status, listing.availableFrom]);
 
   const handleFavorite = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -141,6 +187,20 @@ export function ListingCard({
             >
               {listing.roomType === RoomType.SINGLE ? 'Single' : 'Shared'}
             </Badge>
+            {/* Availability Status */}
+            <div className="absolute top-1 right-1">
+              {isAvailable ? (
+                <Badge variant="default" className="bg-green-600 text-xs">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Available
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="text-xs">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  Booked
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* Content */}
@@ -223,6 +283,19 @@ export function ListingCard({
           
           {variant === 'featured' && (
             <Badge variant="destructive">Featured</Badge>
+          )}
+
+          {/* Availability Status Badge */}
+          {isAvailable ? (
+            <Badge variant="default" className="bg-green-600">
+              <CheckCircle className="h-3 w-3 mr-1" />
+              Available Now
+            </Badge>
+          ) : (
+            <Badge variant="destructive">
+              <AlertCircle className="h-3 w-3 mr-1" />
+              Currently Booked
+            </Badge>
           )}
         </div>
 
@@ -365,9 +438,14 @@ export function ListingCard({
           </Link>
           
           {listing.landlord && (
-            <Button onClick={handleContact} className="flex-1 cursor-pointer">
+            <Button 
+              onClick={handleContact} 
+              className="flex-1 cursor-pointer"
+              disabled={!isAvailable}
+              title={!isAvailable ? 'Not available for booking' : 'Contact landlord'}
+            >
               <MessageCircle className="h-4 w-4 mr-2" />
-              Contact
+              {isAvailable ? 'Book Now' : 'Unavailable'}
             </Button>
           )}
         </div>

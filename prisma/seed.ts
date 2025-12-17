@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, TransportMode, RoomType } from '@prisma/client';
+import { PrismaClient, Prisma, UserRole, TransportMode, RoomType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -427,8 +427,8 @@ async function main() {
     }
   }
 
-  // Create Sample Bookings
-  console.log('💳 Creating sample bookings...');
+  // Create Sample Bookings with Payment Data
+  console.log('💳 Creating sample bookings with payment data...');
   for (let i = 0; i < 3; i++) {
     const bachelor = bachelors[i];
     const listing = listings[i];
@@ -442,19 +442,176 @@ async function main() {
     const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
                        (endDate.getMonth() - startDate.getMonth());
     const totalAmount = listing.price * monthsDiff;
+    
+    // Payment system configuration
+    const upfrontMonths = i === 0 ? 3 : 2; // Mix of 2 and 3 month upfront
+    const monthlyAmount = listing.price;
+    const dailyRate = monthlyAmount / 30;
+    const upfrontDays = upfrontMonths * 30;
+    const upfrontAmount = Math.round(upfrontDays * dailyRate);
 
-    await prisma.booking.create({
+    const booking = await prisma.booking.create({
       data: {
         listingId: listing.id,
         userId: bachelor.id,
         startDate,
         endDate,
-        amount: listing.price * 0.1, // 10% deposit
+        amount: upfrontAmount, // Upfront amount as initial amount
         totalAmount: totalAmount, // Total amount for the entire booking period
         currency: 'BDT',
-        status: i === 0 ? 'PAID' : 'PENDING'
+        status: i === 0 ? 'PAID' : 'PENDING' // First booking is paid for testing
       }
     });
+
+    // Create MonthlyPayment rows for the booking
+    {
+      const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 +
+                         (endDate.getMonth() - startDate.getMonth());
+      const monthlyRows: Prisma.MonthlyPaymentCreateManyInput[] = [];
+      for (let m = 0; m < monthsDiff; m++) {
+        const periodStart = new Date(startDate);
+        periodStart.setMonth(periodStart.getMonth() + m);
+        const periodEnd = new Date(periodStart);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        monthlyRows.push({
+          bookingId: booking.id,
+          userId: bachelor.id,
+          listingId: listing.id,
+          type: m < upfrontMonths ? 'UPFRONT' : 'MONTHLY',
+          amount: monthlyAmount,
+          currency: 'BDT',
+          status: i === 0 && m < upfrontMonths ? 'PAID' : 'PENDING',
+          dueDate: periodStart,
+          periodStart,
+          periodEnd,
+        });
+      }
+      if (monthlyRows.length) {
+        await prisma.monthlyPayment.createMany({ data: monthlyRows, skipDuplicates: true });
+      }
+    }
+
+    // Create BookingPayment for first booking
+    if (i === 0) {
+      const paymentDate = new Date();
+      paymentDate.setDate(paymentDate.getDate() - 2); // Paid 2 days ago
+      
+      await prisma.bookingPayment.create({
+        data: {
+          bookingId: booking.id,
+          userId: bachelor.id,
+          listingId: listing.id,
+          amount: upfrontAmount,
+          currency: 'BDT',
+          status: 'COMPLETED',
+          paymentMethod: 'CARD',
+          transactionId: `TXN-${Date.now()}-${i}`,
+          sslTransactionId: `SSL-${Date.now()}-${i}`,
+          cardType: 'VISA',
+          cardNo: '**** **** **** 1234',
+          cardIssuer: 'Dhaka Bank',
+          paymentAt: paymentDate
+        }
+      });
+
+      // Mark upfront monthly payments as paid with paidAt
+      await prisma.monthlyPayment.updateMany({
+        where: { bookingId: booking.id, type: 'UPFRONT' },
+        data: { status: 'PAID', paidAt: new Date() },
+      });
+    }
+
+    console.log(`Created booking: ${bachelor.name} → ${listing.title}`);
+    console.log(`  - Upfront: ${upfrontMonths}M (৳${upfrontAmount}), Monthly: ৳${monthlyAmount}`);
+    console.log(`  - Duration: ${monthsDiff} months, Total: ৳${totalAmount}`);
+  }
+
+  // Create additional bookings for more varied payment schedules
+  console.log('💳 Creating additional bookings for payment testing...');
+  for (let i = 0; i < 2; i++) {
+    const bachelor = bachelors[i];
+    const listing = listings[listings.length - 3 - i]; // Use different listings
+    
+    // Past booking (for completed schedule testing)
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 3); // Started 3 months ago
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + 3); // Ends in 3 months
+
+    const monthsDiff = 6; // 6 months total
+    const upfrontMonths = 2;
+    const monthlyAmount = listing.price;
+    const dailyRate = monthlyAmount / 30;
+    const upfrontAmount = Math.round(upfrontMonths * 30 * dailyRate);
+    const totalAmount = listing.price * monthsDiff;
+
+    const booking = await prisma.booking.create({
+      data: {
+        listingId: listing.id,
+        userId: bachelor.id,
+        startDate,
+        endDate,
+        amount: upfrontAmount,
+        totalAmount: totalAmount,
+        currency: 'BDT',
+        status: 'PAID'
+      }
+    });
+
+    // Create MonthlyPayment rows for this booking
+    {
+      const monthsTotal = 6;
+      const monthlyRows: Prisma.MonthlyPaymentCreateManyInput[] = [];
+      for (let m = 0; m < monthsTotal; m++) {
+        const periodStart = new Date(startDate);
+        periodStart.setMonth(periodStart.getMonth() + m);
+        const periodEnd = new Date(periodStart);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        monthlyRows.push({
+          bookingId: booking.id,
+          userId: bachelor.id,
+          listingId: listing.id,
+          type: m < upfrontMonths ? 'UPFRONT' : 'MONTHLY',
+          amount: monthlyAmount,
+          currency: 'BDT',
+          status: m < upfrontMonths ? 'PAID' : 'PENDING',
+          dueDate: periodStart,
+          periodStart,
+          periodEnd,
+        });
+      }
+      if (monthlyRows.length) {
+        await prisma.monthlyPayment.createMany({ data: monthlyRows, skipDuplicates: true });
+      }
+    }
+
+    // Create payment for this booking
+    const paymentDate = new Date();
+    paymentDate.setMonth(paymentDate.getMonth() - 2);
+
+    await prisma.bookingPayment.create({
+      data: {
+        bookingId: booking.id,
+        userId: bachelor.id,
+        listingId: listing.id,
+        amount: upfrontAmount,
+        currency: 'BDT',
+        status: 'COMPLETED',
+        paymentMethod: 'MOBILE',
+        transactionId: `TXN-${Date.now()}-${i}`,
+        sslTransactionId: `SSL-${Date.now()}-${i}`,
+        paymentAt: paymentDate
+      }
+    });
+
+    // Mark upfront monthly payments as paid
+    await prisma.monthlyPayment.updateMany({
+      where: { bookingId: booking.id, type: 'UPFRONT' },
+      data: { status: 'PAID', paidAt: paymentDate },
+    });
+
+    console.log(`Created past booking: ${bachelor.name} → ${listing.title}`);
+    console.log(`  - Status: PAID, Created: ${paymentDate.toLocaleDateString()}`);
   }
 
   console.log('✅ Seed completed successfully!');
@@ -465,12 +622,29 @@ async function main() {
   console.log(`- Created ${listings.length} listings`);
   console.log(`- Created sample reviews and ratings`);
   console.log(`- Created ${sampleThreads.length} chat threads with messages`);
-  console.log(`- Created 3 sample bookings`);
+  console.log(`- Created 5 sample bookings with payment data`);
+  console.log(`- Created payment records for testing`);
+  
+  console.log('\n💳 Payment Testing Data Created:');
+  console.log('- Bookings with 2-month and 3-month upfront periods');
+  console.log('- Mix of PAID and PENDING booking statuses');
+  console.log('- BookingPayment records with transaction IDs');
+  console.log('- Past bookings for completed payment schedule testing');
+  console.log('- Various payment methods (CARD, MOBILE)');
   
   console.log('\n🔑 Test Credentials:');
   console.log('Admin: admin@roomfinder.com / admin123');
   console.log('Bachelor: ahmed@example.com / bachelor123');
   console.log('Landlord: karim@example.com / landlord123');
+  
+  console.log('\n🧪 Test Payment Schedules:');
+  console.log('Login as Ahmed Rahman (ahmed@example.com)');
+  console.log('Go to Dashboard → Payments tab');
+  console.log('You should see:');
+  console.log('  - Active payment schedules from recent bookings');
+  console.log('  - Payment status (PAID, PENDING, OVERDUE)');
+  console.log('  - Upfront and monthly payment breakdown');
+  console.log('  - Manage button to handle individual payments');
 }
 
 main()

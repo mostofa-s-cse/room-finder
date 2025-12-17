@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { format, addDays, isAfter, startOfDay, parseISO } from 'date-fns';
-import { CalendarIcon, AlertCircle, Clock, CreditCard, Smartphone, Banknote } from 'lucide-react';
-import { useBookingAvailability, validateBookingDates, calculateBookingDuration } from '@/hooks/useBookingAvailability';
+import { CalendarIcon, AlertCircle, Clock, CreditCard, Smartphone, Banknote, CheckCircle } from 'lucide-react';
+import { useBookingAvailability, validateBookingDates } from '@/hooks/useBookingAvailability';
 import { toast } from 'react-hot-toast';
 import { useSSLCommerz } from '@/hooks/usePayments';
 import { useSession } from 'next-auth/react';
@@ -52,6 +52,9 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'mobile' | 'cash'>('card');
+  const [useCustomPayment, setUseCustomPayment] = useState(false);
+  const [customPaymentAmount, setCustomPaymentAmount] = useState<number>(0);
+  const [upfrontMonths, setUpfrontMonths] = useState<2 | 3>(2);
   const [customerInfo, setCustomerInfo] = useState({
     name: session?.user?.name || '',
     email: session?.user?.email || '',
@@ -60,6 +63,15 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
   });
   
   const { checkAvailability, isLoading: checkingAvailability } = useBookingAvailability();
+  
+  // Calculate booking duration
+  const calculateBookingDuration = (start: Date, end: Date) => {
+    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  };
+  
+  const duration = React.useMemo(() => {
+    return startDate && endDate ? calculateBookingDuration(startDate, endDate) : 0;
+  }, [startDate, endDate]);
   
   const { initializePayment, isProcessing: isProcessingPayment } = useSSLCommerz({
     onSuccess: (validation) => {
@@ -164,13 +176,29 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
   }, [startDate, endDate, listing.id, checkAvailability]);
 
   const calculateTotalAmount = () => {
+    if (useCustomPayment && customPaymentAmount > 0) {
+      return customPaymentAmount;
+    }
+    
     if (!startDate || !endDate) return 0;
     
-    const duration = calculateBookingDuration(startDate, endDate);
     const monthlyRate = listing.price;
-    const dailyRate = monthlyRate / 30; // Approximate daily rate
+    const dailyRate = monthlyRate / 30;
     
-    return Math.round(duration * dailyRate);
+    // Calculate only upfront payment (2 or 3 months)
+    const upfrontDays = upfrontMonths * 30;
+    return Math.round(upfrontDays * dailyRate);
+  };
+
+  const calculateMonthlyAmount = () => {
+    if (useCustomPayment && customPaymentAmount > 0) {
+      // If custom payment is set, divide by duration to get monthly equivalent
+      const duration = startDate && endDate ? calculateBookingDuration(startDate, endDate) : 1;
+      const months = Math.max(1, duration / 30);
+      return Math.round(customPaymentAmount / months);
+    }
+    
+    return listing.price;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -195,6 +223,13 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
       return;
     }
 
+    // Validate custom payment if enabled
+    if (useCustomPayment && (!customPaymentAmount || customPaymentAmount <= 0)) {
+      setErrors({ payment: 'Please enter a valid custom payment amount' });
+      toast.error('Please enter a valid custom payment amount');
+      return;
+    }
+
     // Validate dates
     const dateValidation = validateBookingDates(startDate, endDate);
     if (!dateValidation.isValid) {
@@ -213,6 +248,7 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
 
     try {
       const totalAmount = calculateTotalAmount();
+      const monthlyAmount = calculateMonthlyAmount();
       
       // Step 1: Create booking
       const bookingResponse = await fetch('/api/bookings', {
@@ -226,6 +262,8 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
           endDate: endDate.toISOString(),
           amount: totalAmount,
           guestCount,
+          upfrontMonths,
+          monthlyAmount,
         }),
       });
 
@@ -246,7 +284,29 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
         return;
       }
 
-      // Step 2: Handle based on payment method
+      // Step 2: Create payment schedule
+      const paymentScheduleResponse = await fetch('/api/payments/schedules', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          bookingId: bookingData.data.id,
+          listingId: listing.id,
+          listingTitle: listing.title,
+          upfrontAmount: totalAmount,
+          upfrontMonths,
+          monthlyAmount,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        }),
+      });
+
+      if (!paymentScheduleResponse.ok) {
+        console.warn('Payment schedule creation warning:', paymentScheduleResponse.statusText);
+      }
+
+      // Step 3: Handle based on payment method
       if (paymentMethod === 'cash') {
         // For cash payment, mark as completed immediately and redirect to success
         try {
@@ -291,7 +351,7 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
           customerPhone: customerInfo.phone,
           customerAddress: customerInfo.address || 'N/A',
           productName: listing.title,
-          productDescription: `Booking from ${format(startDate, 'MMM dd, yyyy')} to ${format(endDate, 'MMM dd, yyyy')}`,
+          productDescription: `Booking from ${format(startDate, 'MMM dd, yyyy')} to ${format(endDate, 'MMM dd, yyyy')} - Upfront Payment (${upfrontMonths} months)`,
           bookingId: bookingData.data.id,
           userId: session.user.id,
           listingId: listing.id,
@@ -313,9 +373,6 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
       setIsSubmitting(false);
     }
   };
-
-  const duration = startDate && endDate ? calculateBookingDuration(startDate, endDate) : 0;
-  const totalAmount = calculateTotalAmount();
 
   return (
     <Card className="w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
@@ -395,23 +452,58 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
           {/* Booking Summary */}
           {startDate && endDate && duration > 0 && Object.keys(errors).length === 0 && (
             <div className="space-y-2 p-3 bg-gray-50 rounded-md">
-              <div className="flex justify-between text-sm">
-                <span>Duration:</span>
-                <span className="font-medium">{duration} days</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span>Rate:</span>
-                <span>৳{Math.round(totalAmount / duration)}/day</span>
-              </div>
-              {listing.securityDeposit && (
+              <div className="border-b pb-3 mb-3">
+                <h3 className="font-semibold text-sm mb-2">📋 Booking Overview</h3>
                 <div className="flex justify-between text-sm">
-                  <span>Security Deposit:</span>
-                  <span>৳{listing.securityDeposit.toLocaleString()}</span>
+                  <span>Total Duration:</span>
+                  <span className="font-medium">{duration} days ({(duration / 30).toFixed(1)} months)</span>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-2 mb-3">
+                <div className="font-semibold text-blue-900 flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Upfront Payment ({upfrontMonths} Months)
+                </div>
+                <div className="text-sm text-blue-800">
+                  <div className="flex justify-between mb-1">
+                    <span>Rate:</span>
+                    <span>৳{Math.round(calculateTotalAmount() / (upfrontMonths * 30)).toLocaleString()}/day</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-lg pt-2 border-t border-blue-300">
+                    <span>Total Upfront:</span>
+                    <span>৳{calculateTotalAmount().toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {duration > upfrontMonths * 30 && (
+                <div className="bg-green-50 border border-green-200 rounded p-3 space-y-2">
+                  <div className="font-semibold text-green-900">
+                    📅 Remaining Monthly Payments
+                  </div>
+                  <div className="text-sm text-green-800">
+                    <div className="flex justify-between mb-1">
+                      <span>Monthly Rate:</span>
+                      <span>৳{calculateMonthlyAmount().toLocaleString()}/month</span>
+                    </div>
+                    <div className="flex justify-between mb-1">
+                      <span>Remaining Months:</span>
+                      <span>{Math.ceil((duration - upfrontMonths * 30) / 30)} months</span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-sm pt-2 border-t border-green-300">
+                      <span>Total Remaining:</span>
+                      <span>৳{(calculateMonthlyAmount() * Math.ceil((duration - upfrontMonths * 30) / 30)).toLocaleString()}</span>
+                    </div>
+                  </div>
                 </div>
               )}
-              <div className="flex justify-between font-semibold border-t pt-2">
-                <span>Total Amount:</span>
-                <span>৳{totalAmount.toLocaleString()}</span>
+
+              <div className="flex justify-between font-bold text-lg bg-white p-3 rounded border-2 border-primary">
+                <span>Grand Total:</span>
+                <span className="text-primary">
+                  ৳{(calculateTotalAmount() + (duration > upfrontMonths * 30 ? calculateMonthlyAmount() * Math.ceil((duration - upfrontMonths * 30) / 30) : 0)).toLocaleString()}
+                </span>
               </div>
             </div>
           )}
@@ -466,6 +558,81 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
                 placeholder="Your address"
               />
             </div>
+          </div>
+
+          {/* Upfront Payment Selection */}
+          <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <Label className="text-sm font-semibold text-gray-900">Upfront Payment Period *</Label>
+            <div className="grid grid-cols-2 gap-3">
+              {[2, 3].map((months) => (
+                <button
+                  key={months}
+                  type="button"
+                  onClick={() => setUpfrontMonths(months as 2 | 3)}
+                  className={`p-4 rounded-lg border-2 transition-all text-center ${
+                    upfrontMonths === months
+                      ? 'border-blue-600 bg-blue-100'
+                      : 'border-blue-200 bg-white hover:border-blue-400'
+                  }`}
+                >
+                  <div className="text-lg font-bold text-blue-700">{months}</div>
+                  <div className="text-xs text-gray-600">Month{months > 1 ? 's' : ''}</div>
+                  <div className="text-sm font-semibold text-blue-600 mt-1">
+                    ৳{(Math.round((listing.price / 30) * 30 * months)).toLocaleString()}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-blue-700 bg-white p-2 rounded">
+              ℹ️ Pay {upfrontMonths} months upfront, then pay monthly for remaining duration
+            </p>
+          </div>
+
+          {/* Custom Payment Option */}
+          <div className="space-y-3 p-4 bg-amber-50 rounded-lg border border-amber-200">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold text-gray-900">Use Custom Payment Amount?</Label>
+              <button
+                type="button"
+                onClick={() => {
+                  setUseCustomPayment(!useCustomPayment);
+                  setCustomPaymentAmount(0);
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  useCustomPayment ? 'bg-green-600' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    useCustomPayment ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {useCustomPayment && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-amount">Total Payment Amount (৳) *</Label>
+                <Input
+                  id="custom-amount"
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={customPaymentAmount || ''}
+                  onChange={(e) => setCustomPaymentAmount(Number(e.target.value))}
+                  placeholder="Enter your custom amount"
+                  className="font-semibold text-lg"
+                />
+                {customPaymentAmount > 0 && (
+                  <div className="p-3 bg-white rounded-md border border-amber-300">
+                    <div className="text-center">
+                      <div className="text-xs text-gray-600 mb-1">Total Payment</div>
+                      <div className="font-semibold text-2xl text-amber-700">৳{customPaymentAmount.toLocaleString()}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Payment Method Selection */}
@@ -594,17 +761,25 @@ export function BookingForm({ listing, onBookingSuccess, onCancel }: BookingForm
           </div>
 
           {/* Availability Notice */}
-          {listing.availableFrom && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Clock className="h-4 w-4" />
-              <span>Available from {format(startOfDay(parseISO(listing.availableFrom)), 'MMM dd, yyyy')}</span>
+          {isAvailableNow && (
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 p-3 rounded-lg border border-green-200">
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              <span className="font-medium">Available for booking now</span>
             </div>
           )}
 
           {!isAvailableNow && (
-            <Badge variant="destructive" className="w-full justify-center">
-              Currently unavailable for booking
-            </Badge>
+            <div className="space-y-2">
+              {listing.availableFrom && (
+                <div className="flex items-center gap-2 text-sm text-orange-700 bg-orange-50 p-3 rounded-lg border border-orange-200">
+                  <Clock className="h-4 w-4 flex-shrink-0" />
+                  <span>Available from {format(startOfDay(parseISO(listing.availableFrom)), 'MMM dd, yyyy')}</span>
+                </div>
+              )}
+              <Badge variant="destructive" className="w-full justify-center">
+                Currently unavailable for booking
+              </Badge>
+            </div>
           )}
           </form>
         </CardContent>

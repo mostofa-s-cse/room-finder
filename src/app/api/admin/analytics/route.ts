@@ -89,44 +89,63 @@ export async function GET() {
       })
     ]);
 
-    // Fetch revenue data (if you have booking/payment tables)
+    // Fetch revenue data from bookings
     const revenueData = await Promise.all([
-      // You might need to adjust this based on your actual booking/payment schema
-      prisma.booking?.count({
+      prisma.booking.aggregate({
         where: {
           createdAt: {
             gte: threeMonthsAgo,
             lt: twoMonthsAgo
           },
-          status: 'CONFIRMED'
+          status: {
+            in: ['CONFIRMED', 'PAID', 'COMPLETED']
+          }
+        },
+        _sum: {
+          totalAmount: true
         }
-      }).catch(() => 0) || 0,
-      prisma.booking?.count({
+      }),
+      prisma.booking.aggregate({
         where: {
           createdAt: {
             gte: twoMonthsAgo,
             lt: previousMonth
           },
-          status: 'CONFIRMED'
+          status: {
+            in: ['CONFIRMED', 'PAID', 'COMPLETED']
+          }
+        },
+        _sum: {
+          totalAmount: true
         }
-      }).catch(() => 0) || 0,
-      prisma.booking?.count({
+      }),
+      prisma.booking.aggregate({
         where: {
           createdAt: {
             gte: previousMonth,
             lt: currentMonth
           },
-          status: 'CONFIRMED'
+          status: {
+            in: ['CONFIRMED', 'PAID', 'COMPLETED']
+          }
+        },
+        _sum: {
+          totalAmount: true
         }
-      }).catch(() => 0) || 0,
-      prisma.booking?.count({
+      }),
+      prisma.booking.aggregate({
         where: {
           createdAt: {
             gte: currentMonth
           },
-          status: 'CONFIRMED'
+          status: {
+            in: ['CONFIRMED', 'PAID', 'COMPLETED']
+          }
+        },
+        _sum: {
+          totalAmount: true
         }
-      }).catch(() => 0) || 0
+      })
     ]);
 
     // Fetch top cities data
@@ -161,15 +180,15 @@ export async function GET() {
         },
         { 
           month: getMonthName(twoMonthsAgo), 
-          users: userGrowthData[0] + userGrowthData[1] 
+          users: userGrowthData[1] 
         },
         { 
           month: getMonthName(previousMonth), 
-          users: userGrowthData[0] + userGrowthData[1] + userGrowthData[2] 
+          users: userGrowthData[2] 
         },
         { 
           month: getMonthName(currentMonth), 
-          users: userGrowthData[0] + userGrowthData[1] + userGrowthData[2] + userGrowthData[3] 
+          users: userGrowthData[3] 
         }
       ],
       listingGrowth: [
@@ -179,33 +198,33 @@ export async function GET() {
         },
         { 
           month: getMonthName(twoMonthsAgo), 
-          listings: listingGrowthData[0] + listingGrowthData[1] 
+          listings: listingGrowthData[1] 
         },
         { 
           month: getMonthName(previousMonth), 
-          listings: listingGrowthData[0] + listingGrowthData[1] + listingGrowthData[2] 
+          listings: listingGrowthData[2] 
         },
         { 
           month: getMonthName(currentMonth), 
-          listings: listingGrowthData[0] + listingGrowthData[1] + listingGrowthData[2] + listingGrowthData[3] 
+          listings: listingGrowthData[3] 
         }
       ],
       revenueGrowth: [
         { 
           month: getMonthName(threeMonthsAgo), 
-          revenue: revenueData[0] * 5000 // Estimated revenue per booking
+          revenue: revenueData[0]._sum.totalAmount || 0
         },
         { 
           month: getMonthName(twoMonthsAgo), 
-          revenue: (revenueData[0] + revenueData[1]) * 5000 
+          revenue: revenueData[1]._sum.totalAmount || 0
         },
         { 
           month: getMonthName(previousMonth), 
-          revenue: (revenueData[0] + revenueData[1] + revenueData[2]) * 5000 
+          revenue: revenueData[2]._sum.totalAmount || 0
         },
         { 
           month: getMonthName(currentMonth), 
-          revenue: (revenueData[0] + revenueData[1] + revenueData[2] + revenueData[3]) * 5000 
+          revenue: revenueData[3]._sum.totalAmount || 0
         }
       ],
       topCities: topCitiesRaw.map(cityData => ({

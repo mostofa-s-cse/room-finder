@@ -52,6 +52,7 @@ model User {
   userAnalytics           UserAnalytics[]          @relation("UserAnalyticsData")
   bachelorRequests        TenantRequest[]          @relation("BachelorRequests")
   landlordRequests        TenantRequest[]          @relation("LandlordRequests")
+  monthlyPayments         MonthlyPayment[]         @relation("UserMonthlyPayments")
 
   @@map("users")
 }
@@ -95,6 +96,7 @@ model Listing {
   reviews           Review[]
   transactions      Transaction[]      @relation("ListingTransactions")
   tenantRequests    TenantRequest[]    @relation("ListingRequests")
+  monthlyPayments   MonthlyPayment[]   @relation("ListingMonthlyPayments")
 
   @@index([landlordId], map: "listings_landlordId_fkey")
   @@map("listings")
@@ -134,6 +136,7 @@ model Booking {
   user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   paymentIntents  PaymentIntent[] @relation("BookingPaymentIntents")
   transactions    Transaction[]   @relation("BookingTransactions")
+  monthlyPayments MonthlyPayment[] @relation("BookingMonthlyPayments")
 
   @@index([listingId], map: "bookings_listingId_fkey")
   @@index([userId], map: "bookings_userId_fkey")
@@ -278,6 +281,34 @@ model BookingPayment {
   @@index([listingId], map: "booking_payments_listingId_fkey")
   @@index([userId], map: "booking_payments_userId_fkey")
   @@map("booking_payments")
+}
+
+model MonthlyPayment {
+  id            String   @id @default(cuid())
+  bookingId     String
+  userId        String
+  listingId     String
+  type          String   @default("MONTHLY") // UPFRONT or MONTHLY
+  amount        Float
+  currency      String   @default("BDT")
+  status        String   @default("PENDING") // PENDING, PAID, OVERDUE, PENDING_CONFIRMATION
+  paymentMethod String?
+  transactionId String?
+  dueDate       DateTime
+  periodStart   DateTime
+  periodEnd     DateTime
+  paidAt        DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  booking       Booking  @relation("BookingMonthlyPayments", fields: [bookingId], references: [id], onDelete: Cascade)
+  listing       Listing  @relation("ListingMonthlyPayments", fields: [listingId], references: [id], onDelete: Cascade)
+  user          User     @relation("UserMonthlyPayments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId], map: "monthly_payments_bookingId_fkey")
+  @@index([userId], map: "monthly_payments_userId_fkey")
+  @@index([listingId], map: "monthly_payments_listingId_fkey")
+  @@unique([bookingId, dueDate])
+  @@map("monthly_payments")
 }
 
 model RefundLog {

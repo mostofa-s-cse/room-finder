@@ -31,9 +31,13 @@ export async function GET() {
       // Total bookings
       prisma.booking.count(),
       
-      // Total revenue (sum of all completed bookings)
+      // Total revenue (sum of all confirmed, paid and completed bookings)
       prisma.booking.aggregate({
-        where: { status: 'COMPLETED' },
+        where: { 
+          status: {
+            in: ['CONFIRMED', 'PAID', 'COMPLETED']
+          }
+        },
         _sum: { totalAmount: true }
       }).then(result => result._sum.totalAmount || 0),
       
