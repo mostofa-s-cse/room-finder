@@ -1,7 +1,7 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 // Form components moved to edit page
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   Building, 
   DollarSign, 
@@ -240,6 +241,9 @@ export default function LandlordDashboard() {
   // UI state
   const [searchTerm] = useState('');
   const [filterStatus] = useState<string>('all');
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   
   // Form states - keeping minimal interface
   interface ListingFormType {
@@ -262,6 +266,118 @@ export default function LandlordDashboard() {
     type: 'success' | 'error' | 'warning' | 'info';
     message: string;
   }>>([]);
+
+  const getMonthKey = useCallback((dateString: string) => {
+    const parsed = new Date(dateString);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
+  const isBookingOverdue = useCallback((booking: Booking) => {
+    const end = new Date(booking.endDate).getTime();
+    const now = Date.now();
+    const closed = booking.status === 'COMPLETED' || booking.status === 'CANCELLED' || booking.status === 'PAID';
+    return end < now && !closed;
+  }, []);
+
+  const monthlySummaries = useMemo(() => {
+    const summary: Record<string, {
+      label: string;
+      bookings: Booking[];
+      totalAmount: number;
+      statusCounts: Record<Booking['status'], number>;
+      earliestStart?: string;
+      latestEnd?: string;
+      overdueCount: number;
+    }> = {};
+
+    bookings.forEach((booking) => {
+      const monthKey = getMonthKey(booking.startDate);
+      if (!monthKey) return;
+      const label = new Date(booking.startDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      if (!summary[monthKey]) {
+        summary[monthKey] = {
+          label,
+          bookings: [],
+          totalAmount: 0,
+          statusCounts: {
+            PENDING: 0,
+            CONFIRMED: 0,
+            PAID: 0,
+            CANCELLED: 0,
+            COMPLETED: 0,
+          },
+          overdueCount: 0,
+        };
+      }
+
+      summary[monthKey].bookings.push(booking);
+      const amountValue = booking.totalAmount ?? booking.amount ?? 0;
+      summary[monthKey].totalAmount += amountValue;
+      summary[monthKey].statusCounts[booking.status] += 1;
+
+       const startTs = new Date(booking.startDate).getTime();
+       const endTs = new Date(booking.endDate).getTime();
+       if (!summary[monthKey].earliestStart || startTs < new Date(summary[monthKey].earliestStart).getTime()) {
+         summary[monthKey].earliestStart = booking.startDate;
+       }
+       if (!summary[monthKey].latestEnd || endTs > new Date(summary[monthKey].latestEnd).getTime()) {
+         summary[monthKey].latestEnd = booking.endDate;
+       }
+       if (isBookingOverdue(booking)) {
+         summary[monthKey].overdueCount += 1;
+       }
+    });
+
+    return Object.entries(summary)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([key, value]) => ({
+        key,
+        ...value,
+        count: value.bookings.length,
+      }));
+  }, [bookings, isBookingOverdue, getMonthKey]);
+
+  const selectedMonthSummary = selectedMonthKey
+    ? monthlySummaries.find((month) => month.key === selectedMonthKey) || null
+    : null;
+
+  const groupedMonthlyBookings = useMemo(() => {
+    if (!selectedMonthSummary) return null;
+
+    const groups = {
+      paid: [] as Booking[],
+      pending: [] as Booking[],
+      overdue: [] as Booking[],
+      other: [] as Booking[],
+    };
+
+    selectedMonthSummary.bookings.forEach((booking) => {
+      if (booking.status === 'PAID') {
+        groups.paid.push(booking);
+        return;
+      }
+      if (booking.status === 'PENDING') {
+        groups.pending.push(booking);
+        return;
+      }
+      if (isBookingOverdue(booking)) {
+        groups.overdue.push(booking);
+        return;
+      }
+      groups.other.push(booking);
+    });
+
+    const sortDesc = (items: Booking[]) =>
+      items.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+
+    return {
+      paid: sortDesc(groups.paid),
+      pending: sortDesc(groups.pending),
+      overdue: sortDesc(groups.overdue),
+      other: sortDesc(groups.other),
+    };
+  }, [selectedMonthSummary, isBookingOverdue]);
 
   const fetchDashboardData = async () => {
     try {
@@ -503,6 +619,20 @@ export default function LandlordDashboard() {
     }
   };
 
+  const handleOpenBookingModal = (booking: Booking) => {
+    const monthKey = getMonthKey(booking.startDate);
+    if (!monthKey) return;
+    setSelectedBooking(booking);
+    setSelectedMonthKey(monthKey);
+    setIsBookingModalOpen(true);
+  };
+
+  const handleOpenMonthFromSummary = (monthKey: string) => {
+    setSelectedBooking(null);
+    setSelectedMonthKey(monthKey);
+    setIsBookingModalOpen(true);
+  };
+
   // Utility functions
   const addAlert = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -527,6 +657,7 @@ export default function LandlordDashboard() {
       case 'CONFIRMED': return 'bg-green-100 text-green-800';
       case 'PENDING': return 'bg-yellow-100 text-yellow-800';
       case 'CANCELLED': return 'bg-red-100 text-red-800';
+      case 'PAID': return 'bg-emerald-100 text-emerald-800';
       case 'COMPLETED': return 'bg-blue-100 text-blue-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -534,6 +665,27 @@ export default function LandlordDashboard() {
 
   const getAvailabilityColor = (isAvailable: boolean) => {
     return isAvailable ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+  };
+
+  const renderBookingRow = (booking: Booking) => {
+    const overdue = isBookingOverdue(booking);
+
+    return (
+      <div key={booking.id} className="flex items-start justify-between p-3 border rounded-md">
+        <div className="space-y-1">
+          <p className="font-semibold">{booking.listing?.title || 'Untitled Listing'}</p>
+          <p className="text-xs text-muted-foreground">{booking.user?.name || 'Unknown user'}</p>
+          <p className="text-xs text-muted-foreground">
+            {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
+          </p>
+        </div>
+        <div className="text-right space-y-1">
+          <Badge className={getStatusColor(booking.status)}>{booking.status}</Badge>
+          <p className="text-sm font-semibold">৳{(booking.totalAmount ?? booking.amount ?? 0).toLocaleString()}</p>
+          {overdue && <p className="text-xs text-red-600 font-semibold">Overdue</p>}
+        </div>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -566,16 +718,16 @@ export default function LandlordDashboard() {
                   Create Listing
                 </Button>
               </Link>
-              <Button variant="outline" size="sm">
+              {/* <Button variant="outline" size="sm">
                 <Download className="h-4 w-4 mr-2" />
                 Export Data
-              </Button>
-              <div className="relative">
+              </Button> */}
+              {/* <div className="relative">
                 <Bell className="h-5 w-5 text-slate-600" />
                 {false && (
                   <div className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></div>
                 )}
-              </div>
+              </div> */}
             </div>
           </div>
         </div>
@@ -919,9 +1071,52 @@ export default function LandlordDashboard() {
               <p className="text-muted-foreground">Review and manage booking requests</p>
             </div>
           </div>
+          {monthlySummaries.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {monthlySummaries.slice(0, 3).map((month) => (
+                <Card 
+                  key={month.key}
+                  className="border border-slate-200 hover:border-blue-200 transition-colors cursor-pointer"
+                  onClick={() => handleOpenMonthFromSummary(month.key)}
+                >
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Monthly snapshot</p>
+                        <p className="text-lg font-semibold">{month.label}</p>
+                        {month.earliestStart && month.latestEnd && (
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(month.earliestStart).toLocaleDateString()} - {new Date(month.latestEnd).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant="outline" className="text-blue-700 border-blue-200 bg-blue-50">
+                        {month.count} {month.count === 1 ? 'booking' : 'bookings'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Revenue</p>
+                        <p className="text-lg font-bold">৳{month.totalAmount.toLocaleString()}</p>
+                      </div>
+                      <div className="text-right space-y-1 text-xs text-muted-foreground">
+                        <p>Paid: {month.statusCounts.PAID}</p>
+                        <p>Pending: {month.statusCounts.PENDING}</p>
+                        <p>Overdue: {month.overdueCount}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
           <div className="space-y-4">
             {Array.isArray(bookings) && bookings.map((booking) => (
-              <Card key={booking.id}>
+              <Card 
+                key={booking.id}
+                className="cursor-pointer transition-shadow hover:shadow-md"
+                onClick={() => handleOpenBookingModal(booking)}
+              >
                 <CardContent className="p-6">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center space-x-4">
@@ -956,31 +1151,60 @@ export default function LandlordDashboard() {
                         {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
                       </p>
                       <div className="flex gap-2 mt-2">
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenBookingModal(booking);
+                          }}
+                        >
+                          View
+                        </Button>
                         {booking.status === 'PENDING' && (
                           <>
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleUpdateBookingStatus(booking.id, 'CONFIRMED')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateBookingStatus(booking.id, 'CONFIRMED');
+                              }}
                             >
                               Accept
                             </Button>
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => handleUpdateBookingStatus(booking.id, 'CANCELLED')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateBookingStatus(booking.id, 'CANCELLED');
+                              }}
                             >
                               Decline
                             </Button>
                           </>
                         )}
                         {booking.user?.phone && (
-                          <Button size="sm" variant="outline">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(`tel:${booking.user?.phone}`, '_self');
+                            }}
+                          >
                             <Phone className="h-4 w-4 mr-1" />
                             Call
                           </Button>
                         )}
-                        <Button size="sm" variant="outline">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addAlert('info', 'Chat feature coming soon');
+                          }}
+                        >
                           <MessageCircle className="h-4 w-4 mr-1" />
                           Chat
                         </Button>
@@ -1000,6 +1224,148 @@ export default function LandlordDashboard() {
               </div>
             )}
           </div>
+
+          <Dialog
+            open={isBookingModalOpen}
+            onOpenChange={(open) => {
+              setIsBookingModalOpen(open);
+              if (!open) {
+                setSelectedBooking(null);
+                setSelectedMonthKey(null);
+              }
+            }}
+          >
+            <DialogContent className="max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{selectedMonthSummary?.label || 'Booking details'}</DialogTitle>
+                <DialogDescription>
+                  {selectedMonthSummary
+                    ? `${selectedMonthSummary.count} bookings and ৳${selectedMonthSummary.totalAmount.toLocaleString()} this month`
+                    : 'Select a booking to view the monthly breakdown.'}
+                </DialogDescription>
+              </DialogHeader>
+
+              {selectedBooking && (
+                <div className="p-3 rounded-md border bg-slate-50 text-sm">
+                  <p className="text-xs text-muted-foreground">Selected booking</p>
+                  <p className="font-semibold">{selectedBooking.listing?.title || 'Untitled Listing'}</p>
+                  <p className="text-muted-foreground">
+                    {selectedBooking.user?.name || 'Unknown user'} • {new Date(selectedBooking.startDate).toLocaleDateString()} - {new Date(selectedBooking.endDate).toLocaleDateString()}
+                  </p>
+                </div>
+              )}
+
+              {selectedMonthSummary ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="p-3 rounded border">
+                      <p className="text-xs text-muted-foreground">Total bookings</p>
+                      <p className="text-lg font-semibold">{selectedMonthSummary.count}</p>
+                    </div>
+                    <div className="p-3 rounded border">
+                      <p className="text-xs text-muted-foreground">Monthly revenue</p>
+                      <p className="text-lg font-semibold">৳{selectedMonthSummary.totalAmount.toLocaleString()}</p>
+                    </div>
+                    {selectedMonthSummary.earliestStart && selectedMonthSummary.latestEnd && (
+                      <div className="p-3 rounded border col-span-2">
+                        <p className="text-xs text-muted-foreground">Date range</p>
+                        <p className="text-sm font-semibold">
+                          {new Date(selectedMonthSummary.earliestStart).toLocaleDateString()} - {new Date(selectedMonthSummary.latestEnd).toLocaleDateString()}
+                        </p>
+                      </div>
+                    )}
+                    <div className="p-3 rounded border">
+                      <p className="text-xs text-muted-foreground">Confirmed</p>
+                      <p className="text-lg font-semibold">{selectedMonthSummary.statusCounts.CONFIRMED}</p>
+                    </div>
+                    <div className="p-3 rounded border">
+                      <p className="text-xs text-muted-foreground">Pending</p>
+                      <p className="text-lg font-semibold">{selectedMonthSummary.statusCounts.PENDING}</p>
+                    </div>
+                    <div className="p-3 rounded border">
+                      <p className="text-xs text-muted-foreground">Paid</p>
+                      <p className="text-lg font-semibold">{selectedMonthSummary.statusCounts.PAID}</p>
+                    </div>
+                    <div className="p-3 rounded border">
+                      <p className="text-xs text-muted-foreground">Overdue</p>
+                      <p className="text-lg font-semibold">{selectedMonthSummary.overdueCount}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {groupedMonthlyBookings && (
+                      <>
+                        {groupedMonthlyBookings.pending.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold uppercase text-muted-foreground">Pending</p>
+                              <Badge variant="outline" className="text-[11px]">
+                                {groupedMonthlyBookings.pending.length}
+                              </Badge>
+                            </div>
+                            <div className="space-y-2">
+                              {groupedMonthlyBookings.pending.map(renderBookingRow)}
+                            </div>
+                          </div>
+                        )}
+
+                        {groupedMonthlyBookings.paid.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold uppercase text-muted-foreground">Paid</p>
+                              <Badge variant="outline" className="text-[11px]">
+                                {groupedMonthlyBookings.paid.length}
+                              </Badge>
+                            </div>
+                            <div className="space-y-2">
+                              {groupedMonthlyBookings.paid.map(renderBookingRow)}
+                            </div>
+                          </div>
+                        )}
+
+                        {groupedMonthlyBookings.overdue.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold uppercase text-muted-foreground">Overdue</p>
+                              <Badge variant="outline" className="text-[11px]">
+                                {groupedMonthlyBookings.overdue.length}
+                              </Badge>
+                            </div>
+                            <div className="space-y-2">
+                              {groupedMonthlyBookings.overdue.map(renderBookingRow)}
+                            </div>
+                          </div>
+                        )}
+
+                        {groupedMonthlyBookings.other.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-semibold uppercase text-muted-foreground">Other</p>
+                              <Badge variant="outline" className="text-[11px]">
+                                {groupedMonthlyBookings.other.length}
+                              </Badge>
+                            </div>
+                            <div className="space-y-2">
+                              {groupedMonthlyBookings.other.map(renderBookingRow)}
+                            </div>
+                          </div>
+                        )}
+
+                        {groupedMonthlyBookings.pending.length === 0 &&
+                         groupedMonthlyBookings.paid.length === 0 &&
+                         groupedMonthlyBookings.overdue.length === 0 &&
+                         groupedMonthlyBookings.other.length === 0 && (
+                          <p className="text-sm text-muted-foreground">No bookings for this month.</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Select a booking or month to view the monthly breakdown.</p>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Tenants Tab */}

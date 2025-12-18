@@ -118,7 +118,24 @@ export default function RoomDetailsPage() {
     reason: string;
   } | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  const [distanceLabel, setDistanceLabel] = useState<string | null>(null);
   const { isFavorited, toggleFavorite, loading: favoritesLoading } = useFavorites();
+
+  // Haversine distance in km
+  const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const R = 6371; // Earth radius km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
 
   // Check if room is available based on API data
   const isRoomAvailable = () => {
@@ -193,6 +210,36 @@ export default function RoomDetailsPage() {
 
         const data = await response.json();
         setListing(data.data);
+
+        // Capture user geolocation and compute distance to listing
+        if (data.data?.lat && data.data?.lng && typeof navigator !== 'undefined' && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const coords = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              };
+              setUserLocation(coords);
+
+              const km = calculateDistanceKm(coords.lat, coords.lng, data.data.lat, data.data.lng);
+              const kmRounded = Math.round(km * 10) / 10;
+              setDistanceKm(kmRounded);
+
+              // Human-friendly label: meters for sub-1km, else km with sensible precision
+              if (km < 1) {
+                setDistanceLabel(`${Math.round(km * 1000)} m`);
+              } else if (km < 10) {
+                setDistanceLabel(`${kmRounded.toFixed(1)} km`);
+              } else {
+                setDistanceLabel(`${Math.round(km)} km`);
+              }
+            },
+            (err) => {
+              console.warn('Geolocation denied/unavailable:', err);
+            },
+            { enableHighAccuracy: true, timeout: 8000 }
+          );
+        }
 
         // Fetch real-time availability status from API
         setCheckingAvailability(true);
@@ -697,8 +744,18 @@ export default function RoomDetailsPage() {
             {/* Location */}
             <Card>
               <CardHeader>
-                <CardTitle>Location</CardTitle>
-                <CardDescription>{listing.address}, {listing.city}</CardDescription>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <CardTitle>Location</CardTitle>
+                    <CardDescription>{listing.address}, {listing.city}</CardDescription>
+                  </div>
+                  {distanceKm !== null && (
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      <MapPin className="h-3 w-3 mr-1" />
+                      You are {distanceLabel ?? `~${distanceKm} km`} away
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {listing.lat && listing.lng ? (
@@ -707,6 +764,9 @@ export default function RoomDetailsPage() {
                       position={[listing.lat, listing.lng]}
                       defaultCenter={[listing.lat, listing.lng]}
                       address={`${listing.title} - ${listing.address}, ${listing.city}`}
+                      userPosition={userLocation ? [userLocation.lat, userLocation.lng] : null}
+                      distanceKm={distanceKm}
+                      distanceLabel={distanceLabel}
                       onLocationSelect={() => {}} // Read-only map, no interaction needed
                     />
                   </div>
@@ -825,13 +885,13 @@ export default function RoomDetailsPage() {
                             Available from: <span className="font-medium">{format(new Date(availabilityStatus.availableFrom), 'MMM dd, yyyy')}</span>
                           </p>
                           <p className="text-xs mt-2 text-gray-500">
-                            You can contact the landlord or send a tenant request to book in advance.
+                            You can contact the landlord to book in advance.
                           </p>
                         </div>
                       ) : listing.isAvailable === false ? (
-                        <p>This room is currently unavailable. You can contact the landlord or send a tenant request to be notified.</p>
+                        <p>This room is currently unavailable. You can contact the landlord to be notified.</p>
                       ) : (
-                        <p>This room will be available from {new Date(listing.availableFrom).toLocaleDateString()}. You can contact the landlord or send a tenant request in advance.</p>
+                        <p>This room will be available from {new Date(listing.availableFrom).toLocaleDateString()}. You can contact the landlord in advance.</p>
                       )}
                     </div>
                   )}

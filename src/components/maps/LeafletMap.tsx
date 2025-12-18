@@ -1,6 +1,6 @@
 'use client';
 
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Tooltip, useMapEvents } from 'react-leaflet';
 import { useEffect } from 'react';
 import L from 'leaflet';
 
@@ -12,16 +12,21 @@ L.Icon.Default.mergeOptions({
 });
 
 interface LeafletMapProps {
-  position: [number, number] | null;
+  position: [number, number] | null; // primary marker (listing)
   defaultCenter: [number, number];
   address: string;
-  onLocationSelect: (lat: number, lng: number) => void;
+  onLocationSelect?: (lat: number, lng: number) => void;
+  userPosition?: [number, number] | null; // secondary marker (viewer)
+  distanceKm?: number | null; // straight-line distance numeric
+  distanceLabel?: string | null; // human readable distance
 }
 
-function MapClickHandler({ onLocationSelect }: { onLocationSelect: (lat: number, lng: number) => void }) {
+function MapClickHandler({ onLocationSelect }: { onLocationSelect?: (lat: number, lng: number) => void }) {
   useMapEvents({
     click(e) {
-      onLocationSelect(e.latlng.lat, e.latlng.lng);
+      if (onLocationSelect) {
+        onLocationSelect(e.latlng.lat, e.latlng.lng);
+      }
     },
   });
 
@@ -40,7 +45,7 @@ function MapUpdater({ position }: { position: [number, number] | null }) {
   return null;
 }
 
-export default function LeafletMap({ position, defaultCenter, address, onLocationSelect }: LeafletMapProps) {
+export default function LeafletMap({ position, defaultCenter, address, onLocationSelect, userPosition, distanceKm, distanceLabel }: LeafletMapProps) {
   // Check if we're in the browser (client-side)
   if (typeof window === 'undefined') {
     return (
@@ -67,16 +72,42 @@ export default function LeafletMap({ position, defaultCenter, address, onLocatio
       />
       <MapClickHandler onLocationSelect={onLocationSelect} />
       <MapUpdater position={position} />
+      {position && userPosition && (
+        <>
+          <Polyline
+            positions={[userPosition, position]}
+            pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.7 }}
+          >
+            {distanceKm !== undefined && distanceKm !== null && (
+              <Tooltip permanent direction="center" offset={[0, 0]} opacity={0.9} className="bg-white text-blue-700 font-medium px-2 py-1 rounded shadow">
+                {distanceLabel ?? `~${distanceKm.toFixed(1)} km`}
+              </Tooltip>
+            )}
+          </Polyline>
+        </>
+      )}
       {position && (
         <Marker position={position}>
           <Popup>
             <div className="text-sm">
-              <p className="font-medium">Selected Location</p>
+              <p className="font-medium">Listing</p>
               {address && (
                 <p className="mt-1 text-gray-600">{address}</p>
               )}
               <p className="mt-1 text-xs text-gray-500">
                 {position[0].toFixed(6)}, {position[1].toFixed(6)}
+              </p>
+            </div>
+          </Popup>
+        </Marker>
+      )}
+      {userPosition && (
+        <Marker position={userPosition}>
+          <Popup>
+            <div className="text-sm">
+              <p className="font-medium">Your location</p>
+              <p className="mt-1 text-xs text-gray-500">
+                {userPosition[0].toFixed(6)}, {userPosition[1].toFixed(6)}
               </p>
             </div>
           </Popup>
