@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { withErrorHandling, successResponse, requireAuth } from '@/lib/api-utils';
+import { withErrorHandling, successResponse } from '@/lib/api-utils';
 import { 
   checkBookingConflicts, 
   getAvailableDateRanges, 
@@ -15,8 +15,11 @@ const availabilitySchema = z.object({
 
 // GET /api/bookings/availability?listingId=xxx&startDate=xxx&endDate=xxx
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const session = await requireAuth(request);
   const { searchParams } = new URL(request.url);
+  
+  // Note: This endpoint is public to allow checking availability from listing cards
+  // For user-specific exclusions, we would need authentication, but for public availability
+  // we just check all confirmed bookings
   
   const listingId = searchParams.get('listingId');
   const startDateStr = searchParams.get('startDate');
@@ -49,7 +52,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       listingId,
       startDate,
       endDate,
-      excludeUserId: session.user.id,
+      // Don't exclude any user for public availability checks
+      // This shows all confirmed bookings
     });
 
     return successResponse({

@@ -72,13 +72,11 @@ export function PaymentManagementModal({
   const [selectedPayment, setSelectedPayment] = useState<MonthlyPayment | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'mobile' | 'cash'>('card');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
 
   const { initializePayment, isProcessing: isProcessingPayment } = useSSLCommerz({
     onSuccess: () => {
-      // Gateway success callback; final PAID status is confirmed via backend/webhook.
-      toast.success('Payment initiated successfully. Awaiting confirmation.');
-      setIsPaymentDialogOpen(false);
+      toast.success('Payment completed successfully!');
+      onPaymentSuccess?.(selectedPayment!);
       setSelectedPayment(null);
       setPaymentMethod('card');
     },
@@ -132,20 +130,14 @@ export function PaymentManagementModal({
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            status: 'PAID',
+            status: 'PENDING_CONFIRMATION',
             paymentMethod: 'cash',
           }),
         });
 
         if (response.ok) {
-          const payload = await response.json();
-          const status = payload?.data?.status;
-          const isPaid = status === 'PAID';
-          toast.success(isPaid ? 'Payment marked as paid.' : 'Payment recorded.');
-          if (isPaid) {
-            onPaymentSuccess?.(selectedPayment);
-          }
-          setIsPaymentDialogOpen(false);
+          toast.success('Payment marked for cash on delivery');
+          onPaymentSuccess?.(selectedPayment);
           setSelectedPayment(null);
           setPaymentMethod('card');
         } else {
@@ -226,15 +218,14 @@ export function PaymentManagementModal({
   };
 
   return (
-    <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Payment Management</DialogTitle>
-            <DialogDescription>
-              {paymentSchedule.listingTitle} - Payment Schedule & History
-            </DialogDescription>
-          </DialogHeader>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Payment Management</DialogTitle>
+          <DialogDescription>
+            {paymentSchedule.listingTitle} - Payment Schedule & History
+          </DialogDescription>
+        </DialogHeader>
 
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="grid w-full grid-cols-4">
@@ -316,12 +307,7 @@ export function PaymentManagementModal({
                   <div
                     key={payment.id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => {
-                      if (payment.status === 'PENDING' || payment.status === 'OVERDUE') {
-                        setSelectedPayment(payment);
-                        setIsPaymentDialogOpen(true);
-                      }
-                    }}
+                    onClick={() => (payment.status === 'PENDING' || payment.status === 'OVERDUE') && setSelectedPayment(payment)}
                   >
                     <div className="flex items-center space-x-3 flex-1">
                       {getPaymentStatusIcon(payment.status)}
@@ -346,6 +332,16 @@ export function PaymentManagementModal({
                   </div>
                 ))}
 
+                {selectedPayment && upfrontPayments.includes(selectedPayment) && (
+                  <PaymentMethodSelector
+                    selectedMethod={paymentMethod}
+                    onMethodChange={setPaymentMethod}
+                    onPay={handlePayment}
+                    isProcessing={isProcessing || isProcessingPayment}
+                    amount={selectedPayment.amount}
+                    onCancel={() => setSelectedPayment(null)}
+                  />
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -370,12 +366,7 @@ export function PaymentManagementModal({
                     <div
                       key={payment.id}
                       className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => {
-                        if (payment.status === 'PENDING' || payment.status === 'OVERDUE') {
-                          setSelectedPayment(payment);
-                          setIsPaymentDialogOpen(true);
-                        }
-                      }}
+                      onClick={() => (payment.status === 'PENDING' || payment.status === 'OVERDUE') && setSelectedPayment(payment)}
                     >
                       <div className="flex items-center space-x-3 flex-1">
                         {getPaymentStatusIcon(payment.status)}
@@ -401,6 +392,16 @@ export function PaymentManagementModal({
                   ))
                 )}
 
+                {selectedPayment && remainingPayments.includes(selectedPayment) && (
+                  <PaymentMethodSelector
+                    selectedMethod={paymentMethod}
+                    onMethodChange={setPaymentMethod}
+                    onPay={handlePayment}
+                    isProcessing={isProcessing || isProcessingPayment}
+                    amount={selectedPayment.amount}
+                    onCancel={() => setSelectedPayment(null)}
+                  />
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -455,71 +456,13 @@ export function PaymentManagementModal({
           </TabsContent>
         </Tabs>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Payment action dialog for both upfront and monthly payments */}
-      <Dialog open={isPaymentDialogOpen} onOpenChange={(open) => {
-        setIsPaymentDialogOpen(open);
-        if (!open) {
-          setSelectedPayment(null);
-        }
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirm Payment</DialogTitle>
-            <DialogDescription>
-              Choose a payment method to pay {selectedPayment ? format(new Date(selectedPayment.dueDate), 'MMMM yyyy') : ''}.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedPayment ? (
-            (() => {
-              const payment = selectedPayment;
-              return (
-                <div className="space-y-4">
-                  <div className="space-y-1 p-3 bg-gray-50 rounded-lg text-sm">
-                    <div className="flex justify-between">
-                      <span>Amount</span>
-                      <span className="font-semibold">৳{payment.amount.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Due Date</span>
-                      <span>{format(new Date(payment.dueDate), 'MMM dd, yyyy')}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Status</span>
-                      <Badge className={getPaymentStatusColor(payment.status)}>
-                        {payment.status}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <PaymentMethodSelector
-                    selectedMethod={paymentMethod}
-                    onMethodChange={setPaymentMethod}
-                    onPay={handlePayment}
-                    isProcessing={isProcessing || isProcessingPayment}
-                    amount={payment.amount}
-                    onCancel={() => {
-                      setIsPaymentDialogOpen(false);
-                      setSelectedPayment(null);
-                    }}
-                  />
-                </div>
-              );
-            })()
-          ) : (
-            <div className="py-6 text-center text-sm text-gray-500">Select a payment to continue.</div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

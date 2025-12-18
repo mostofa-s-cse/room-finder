@@ -14,7 +14,7 @@ import { ReviewForm } from '@/components/reviews/ReviewForm';
 import { BookingForm } from '@/components/forms/BookingForm';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import dynamic from 'next/dynamic';
-import { isAfter, startOfDay, parseISO, format } from 'date-fns';
+import { format } from 'date-fns';
 import { useFavorites } from '@/hooks/useFavorites';
 
 // Dynamic import for LeafletMap to avoid SSR issues
@@ -109,83 +109,69 @@ export default function RoomDetailsPage() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [hasBooked, setHasBooked] = useState(false);
   const [checkingBooking, setCheckingBooking] = useState(false);
+  const [availabilityStatus, setAvailabilityStatus] = useState<{
+    status: 'available' | 'booked' | 'unavailable';
+    isAvailable: boolean;
+    availableFrom: string | null;
+    currentBookingEnds: string | null;
+    nextBookingStarts: string | null;
+    reason: string;
+  } | null>(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
   const { isFavorited, toggleFavorite, loading: favoritesLoading } = useFavorites();
 
-  // Check if room is available based on listing flag and availableFrom date
+  // Check if room is available based on API data
   const isRoomAvailable = () => {
-    if (!listing) return false;
-    if (listing.isAvailable === false) return false;
-    
-    // Check if availableFrom date has passed (available now)
-    if (listing.availableFrom) {
-      try {
-        // Parse the availableFrom date
-        const availableDate = startOfDay(parseISO(listing.availableFrom));
-        const today = startOfDay(new Date());
-        
-        // Room is available if availableFrom date is today or in the past
-        return !isAfter(availableDate, today);
-      } catch (error) {
-        console.error('Error parsing availableFrom date:', error);
-        return true; // Default to available if there's a parsing error
-      }
+    if (!availabilityStatus) {
+      // Fallback to basic checks if API data not loaded yet
+      if (!listing) return false;
+      if (listing.isAvailable === false) return false;
+      return true;
     }
     
-    // If no availableFrom date, consider available
-    return true;
+    return availabilityStatus.isAvailable;
   };
 
-
-
   const getAvailabilityMessage = () => {
-    if (!listing) return 'Not Available';
-    if (listing.isAvailable === false) return 'Currently Unavailable';
-    
-    // Check date availability
-    if (listing.availableFrom) {
-      try {
-        // Parse the availableFrom date
-        const availableDate = startOfDay(parseISO(listing.availableFrom));
-        const today = startOfDay(new Date());
-        
-        if (isAfter(availableDate, today)) {
-          return `Available from ${format(availableDate, 'MMM dd, yyyy')}`;
-        } else {
-          return 'Available Now';
-        }
-      } catch (error) {
-        console.error('Error parsing availableFrom date:', error);
-        return 'Available Now';
-      }
+    if (!availabilityStatus) {
+      // Fallback message
+      if (!listing) return 'Not Available';
+      if (listing.isAvailable === false) return 'Currently Unavailable';
+      return 'Available Now';
     }
     
-    // If no availableFrom date, consider available
-    return 'Available Now';
+    // Use API data for accurate messaging
+    if (availabilityStatus.isAvailable) {
+      if (availabilityStatus.nextBookingStarts) {
+        const nextDate = new Date(availabilityStatus.nextBookingStarts);
+        return `Available (booked from ${format(nextDate, 'MMM dd, yyyy')})`;
+      }
+      return 'Available Now';
+    } else {
+      // Currently booked
+      if (availabilityStatus.availableFrom) {
+        const availDate = new Date(availabilityStatus.availableFrom);
+        return `Booked • Available ${format(availDate, 'MMM dd, yyyy')}`;
+      }
+      return 'Currently Booked';
+    }
   };
 
   const getAvailabilityBadgeVariant = () => {
-    if (!listing) return 'destructive';
-    if (listing.isAvailable === false) return 'destructive';
-    
-    if (listing.availableFrom) {
-      try {
-        // Parse the availableFrom date
-        const availableDate = startOfDay(parseISO(listing.availableFrom));
-        const today = startOfDay(new Date());
-        
-        if (isAfter(availableDate, today)) {
-          return 'secondary'; // Future availability - gray
-        } else {
-          return 'default'; // Available now - green
-        }
-      } catch (error) {
-        console.error('Error parsing availableFrom date:', error);
-        return 'default';
-      }
+    if (!availabilityStatus) {
+      // Fallback
+      if (!listing) return 'destructive';
+      if (listing.isAvailable === false) return 'destructive';
+      return 'default';
     }
     
-    // If no availableFrom date, consider available
-    return 'default';
+    if (availabilityStatus.isAvailable) {
+      return 'default'; // Available - green
+    } else if (availabilityStatus.availableFrom) {
+      return 'secondary'; // Booked but has future availability - amber/gray
+    } else {
+      return 'destructive'; // Booked with no known availability - red
+    }
   };
 
   useEffect(() => {
@@ -207,6 +193,20 @@ export default function RoomDetailsPage() {
 
         const data = await response.json();
         setListing(data.data);
+
+        // Fetch real-time availability status from API
+        setCheckingAvailability(true);
+        try {
+          const availResponse = await fetch(`/api/listings/status?listingId=${params?.id}`);
+          if (availResponse.ok) {
+            const availData = await availResponse.json();
+            setAvailabilityStatus(availData.data);
+          }
+        } catch (err) {
+          console.error('Failed to check availability:', err);
+        } finally {
+          setCheckingAvailability(false);
+        }
 
         // Check if user has already booked this listing
         if (session) {
@@ -629,8 +629,24 @@ export default function RoomDetailsPage() {
                 <div className="flex flex-wrap gap-2 mt-4">
                   <Badge variant="secondary">{listing.roomType}</Badge>
                   <Badge variant={getAvailabilityBadgeVariant()}>
-                    {getAvailabilityMessage()}
+                    {checkingAvailability ? 'Checking...' : getAvailabilityMessage()}
                   </Badge>
+                  
+                  {/* Show booking conflict details */}
+                  {availabilityStatus && !availabilityStatus.isAvailable && availabilityStatus.currentBookingEnds && (
+                    <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      Booked until {format(new Date(availabilityStatus.currentBookingEnds), 'MMM dd, yyyy')}
+                    </Badge>
+                  )}
+                  
+                  {/* Show next booking if available now */}
+                  {availabilityStatus && availabilityStatus.isAvailable && availabilityStatus.nextBookingStarts && (
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      Next booking: {format(new Date(availabilityStatus.nextBookingStarts), 'MMM dd, yyyy')}
+                    </Badge>
+                  )}
                 </div>
               </CardHeader>
               
@@ -798,8 +814,21 @@ export default function RoomDetailsPage() {
                   
                   {/* Show helpful message when unavailable */}
                   {!isRoomAvailable() && !hasBooked && (
-                    <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">
-                      {listing.isAvailable === false ? (
+                    <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md border border-amber-200">
+                      {availabilityStatus && availabilityStatus.status === 'booked' && availabilityStatus.availableFrom ? (
+                        <div>
+                          <p className="font-medium text-amber-800 mb-1">Currently Booked</p>
+                          <p className="text-xs">
+                            This room is booked until {format(new Date(availabilityStatus.currentBookingEnds || availabilityStatus.availableFrom), 'MMM dd, yyyy')}.
+                          </p>
+                          <p className="text-xs mt-1">
+                            Available from: <span className="font-medium">{format(new Date(availabilityStatus.availableFrom), 'MMM dd, yyyy')}</span>
+                          </p>
+                          <p className="text-xs mt-2 text-gray-500">
+                            You can contact the landlord or send a tenant request to book in advance.
+                          </p>
+                        </div>
+                      ) : listing.isAvailable === false ? (
                         <p>This room is currently unavailable. You can contact the landlord or send a tenant request to be notified.</p>
                       ) : (
                         <p>This room will be available from {new Date(listing.availableFrom).toLocaleDateString()}. You can contact the landlord or send a tenant request in advance.</p>
