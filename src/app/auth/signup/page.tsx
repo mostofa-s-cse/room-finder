@@ -156,7 +156,16 @@ export default function SignupPage() {
         setError('Verification successful but login failed. Please sign in manually.');
         setTimeout(() => router.push('/auth/signin'), 2000);
       } else {
-        router.push(formData.role === 'LANDLORD' ? '/dashboard/landlord' : '/dashboard');
+        // Fetch the session to get the user's actual role
+        const sessionRes = await fetch('/api/auth/session');
+        const session = await sessionRes.json();
+        
+        // Redirect based on actual user role from database
+        if (session?.user?.role === 'LANDLORD') {
+          router.push('/dashboard/landlord');
+        } else {
+          router.push('/dashboard/bachelor');
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed');
