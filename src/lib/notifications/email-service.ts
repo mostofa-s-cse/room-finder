@@ -1,30 +1,4 @@
-// Mock nodemailer for type safety - replace with actual import when package is installed
-interface NodemailerTransporter {
-  sendMail(options: {
-    from: string;
-    to: string;
-    subject: string;
-    html: string;
-    text: string;
-  }): Promise<{ messageId: string }>;
-  verify(): Promise<boolean>;
-}
-
-const nodemailer = {
-  createTransporter: (config: Record<string, unknown>): NodemailerTransporter => {
-    console.log('Mock nodemailer transporter created with config:', config);
-    return {
-      async sendMail(options) {
-        console.log('Mock email sent:', options);
-        return { messageId: 'mock-message-id' };
-      },
-      async verify() {
-        console.log('Mock email verification successful');
-        return true;
-      }
-    };
-  }
-};
+import nodemailer, { Transporter } from 'nodemailer';
 
 interface EmailConfig {
   host: string;
@@ -43,7 +17,7 @@ interface EmailTemplate {
 }
 
 export class EmailService {
-  private transporter: NodemailerTransporter | null = null;
+  private transporter: Transporter | null = null;
   private isConfigured = false;
 
   constructor() {
@@ -53,13 +27,11 @@ export class EmailService {
   private async initialize() {
     const config = this.getEmailConfig();
     if (config) {
-      this.transporter = nodemailer.createTransporter(config as unknown as Record<string, unknown>);
-      this.isConfigured = true;
-      
-      // Verify connection
       try {
+        this.transporter = nodemailer.createTransport(config);
         await this.transporter.verify();
-        console.log('Email service initialized successfully');
+        this.isConfigured = true;
+        console.log('Email service initialized via SMTP host %s:%s', config.host, config.port);
       } catch (error) {
         console.warn('Email verification failed:', error);
         this.isConfigured = false;
@@ -204,6 +176,21 @@ export class EmailService {
       subject: template.subject,
       html: template.html,
       text: template.text
+    });
+  }
+
+  async sendRawEmail(params: { to: string; subject: string; html: string; text: string }): Promise<void> {
+    if (!this.isConfigured || !this.transporter) {
+      console.log('Email service not configured, skipping raw email send');
+      return;
+    }
+
+    await this.transporter.sendMail({
+      from: process.env.EMAIL_FROM || 'noreply@roomfinder.com',
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
     });
   }
 

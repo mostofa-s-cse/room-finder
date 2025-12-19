@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { UserRole } from '@prisma/client';
 import { withErrorHandling, ApiErrorClass } from '@/lib/api-utils';
+import { emailService } from '@/lib/notifications/email-service';
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -42,7 +43,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Hash password
   const passwordHash = await bcrypt.hash(validatedData.password, 12);
 
-  // Create user
+  // Create user as unverified
   const user = await prisma.user.create({
     data: {
       name: validatedData.name,
@@ -50,6 +51,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       passwordHash,
       role: validatedData.role as UserRole,
       phone: validatedData.phone,
+      emailVerifiedAt: null,
     },
     select: {
       id: true,
@@ -58,12 +60,37 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       role: true,
       phone: true,
       createdAt: true,
+      emailVerifiedAt: true,
     }
+  });
+
+  // Generate a 6-digit OTP
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Clean up any previous tokens for this user
+  await prisma.emailVerificationToken.deleteMany({ where: { userId: user.id } });
+
+  // Store the OTP with expiry (10 minutes)
+  await prisma.emailVerificationToken.create({
+    data: {
+      userId: user.id,
+      code,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    },
+  });
+
+  // Send verification email (no-op if email not configured)
+  const bodyHtml = `Your Room Finder verification code is <strong>${code}</strong>. It expires in 10 minutes.`;
+  await emailService.sendRawEmail({
+    to: user.email,
+    subject: 'Verify your Room Finder account',
+    html: bodyHtml,
+    text: `Your Room Finder verification code is ${code}. It expires in 10 minutes.`
   });
 
   return NextResponse.json({
     success: true,
-    message: 'Account created successfully! You can now sign in.',
-    user
+    message: 'Account created successfully. Enter the verification code sent to your email to finish signup.',
+    user,
   }, { status: 201 });
 });

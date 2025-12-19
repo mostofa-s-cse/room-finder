@@ -103,6 +103,8 @@ async function main() {
 
   // Clear existing data
   console.log('🧹 Cleaning existing data...');
+  await prisma.emailVerificationToken.deleteMany();
+  await prisma.passwordResetToken.deleteMany();
   await prisma.chatMessage.deleteMany();
   await prisma.chatThread.deleteMany();
   await prisma.booking.deleteMany();
@@ -120,7 +122,8 @@ async function main() {
       passwordHash: adminPassword,
       role: UserRole.ADMIN,
       phone: '+8801700000000',
-      profilePicture: '/avatar.png'
+      profilePicture: '/avatar.png',
+      emailVerifiedAt: new Date()
     }
   });
 
@@ -138,7 +141,8 @@ async function main() {
         income: 40000,
         affordablePrice: 12000,
         transportMode: TransportMode.BUS,
-        profilePicture: '/avatar.png'
+        profilePicture: '/avatar.png',
+        emailVerifiedAt: new Date()
       }
     }),
     prisma.user.create({
@@ -151,7 +155,8 @@ async function main() {
         income: 60000,
         affordablePrice: 18000,
         transportMode: TransportMode.BIKE,
-        profilePicture: '/avatar.png'
+        profilePicture: '/avatar.png',
+        emailVerifiedAt: new Date()
       }
     }),
     prisma.user.create({
@@ -164,7 +169,8 @@ async function main() {
         income: 30000,
         affordablePrice: 9000,
         transportMode: TransportMode.WALK,
-        profilePicture: '/avatar.png'
+        profilePicture: '/avatar.png',
+        emailVerifiedAt: new Date()
       }
     })
   ]);
@@ -180,7 +186,8 @@ async function main() {
         passwordHash: landlordPassword,
         role: UserRole.LANDLORD,
         phone: '+8801800000001',
-        profilePicture: '/avatar.png'
+        profilePicture: '/avatar.png',
+        emailVerifiedAt: new Date()
       }
     }),
     prisma.user.create({
@@ -190,7 +197,8 @@ async function main() {
         passwordHash: landlordPassword,
         role: UserRole.LANDLORD,
         phone: '+8801800000002',
-        profilePicture: '/avatar.png'
+        profilePicture: '/avatar.png',
+        emailVerifiedAt: new Date()
       }
     }),
     prisma.user.create({
@@ -200,7 +208,8 @@ async function main() {
         passwordHash: landlordPassword,
         role: UserRole.LANDLORD,
         phone: '+8801800000003',
-        profilePicture: '/avatar.png'
+        profilePicture: '/avatar.png',
+        emailVerifiedAt: new Date()
       }
     })
   ]);

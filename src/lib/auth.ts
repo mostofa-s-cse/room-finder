@@ -19,8 +19,16 @@ export const authOptions: NextAuthOptions = {
         }
 
         const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email
+          where: { email: credentials.email },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            phone: true,
+            profilePicture: true,
+            passwordHash: true,
+            emailVerifiedAt: true,
           }
         });
 
@@ -28,10 +36,11 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          user.passwordHash
-        );
+        if (!user.emailVerifiedAt) {
+          return null;
+        }
+
+        const isPasswordValid = await bcrypt.compare(credentials.password, user.passwordHash);
 
         if (!isPasswordValid) {
           return null;
