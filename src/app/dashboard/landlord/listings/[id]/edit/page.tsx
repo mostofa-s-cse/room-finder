@@ -352,38 +352,85 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
     if (!files) return;
     
     setUploadingImages(true);
-    const newImages: string[] = [];
-
-    try {
-      for (let i = 0; i < files.length && newImages.length + formData.images.length < 10; i++) {
-        const file = files[i];
-        
-        if (!file.type.startsWith('image/')) {
-          continue;
-        }
-
-        const formDataUpload = new FormData();
-        formDataUpload.append('file', file);
-        formDataUpload.append('folder', 'listings');
-
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formDataUpload,
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          newImages.push(result.url);
-        }
+    const uploadedImages: string[] = [];
+    const validFiles: File[] = [];
+    
+    // Validate all files first
+    for (const file of Array.from(files)) {
+      // Check if we've reached the 10 image limit
+      if (uploadedImages.length + formData.images.length >= 10) {
+        toast.error('Maximum 10 images allowed');
+        break;
       }
-
-      if (newImages.length > 0) {
-        handleInputChange('images', [...formData.images, ...newImages]);
-        toast.success(`${newImages.length} image(s) uploaded successfully`);
+      
+      // Validate file size (max 5MB per image)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`File ${file.name} is too large. Maximum size is 5MB.`);
+        continue;
+      }
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast.error(`File ${file.name} is not a valid image.`);
+        continue;
+      }
+      
+      validFiles.push(file);
+    }
+    
+    if (validFiles.length === 0) {
+      setUploadingImages(false);
+      return;
+    }
+    
+    try {
+      // Create FormData for multiple files
+      const uploadFormData = new FormData();
+      validFiles.forEach(file => {
+        uploadFormData.append('file', file);
+      });
+      
+      // Upload to API endpoint
+      console.log('Uploading files:', validFiles.map(f => f.name));
+      const uploadResponse = await fetch('/api/upload/image', {
+        method: 'POST',
+        body: uploadFormData
+      });
+      
+      console.log('Upload response status:', uploadResponse.status);
+      
+      if (uploadResponse.ok) {
+        const result = await uploadResponse.json();
+        console.log('Upload result:', result);
+        
+        if (result.success && result.urls) {
+          uploadedImages.push(...result.urls);
+        } else if (result.success && result.url) {
+          // Handle single URL response
+          uploadedImages.push(result.url);
+        }
+        
+        // Show any partial errors
+        if (result.errors && result.errors.length > 0) {
+          result.errors.forEach((error: string) => toast.error(error));
+        }
+      } else {
+        const errorResult = await uploadResponse.json().catch(() => ({ error: { message: 'Unknown upload error', code: 'UPLOAD_ERROR' } }));
+        console.error('Upload failed:', errorResult);
+        handleError(errorResult);
+        toast.error(errorResult.error?.message || errorResult.message || 'Upload failed');
+      }
+      
+      if (uploadedImages.length > 0) {
+        handleInputChange('images', [...formData.images, ...uploadedImages]);
+        const successMessage = `${uploadedImages.length} image(s) uploaded successfully`;
+        toast.success(successMessage);
+      } else {
+        toast.error('No images were uploaded successfully');
       }
     } catch (error) {
       console.error('Error uploading images:', error);
-      toast.error('Failed to upload some images');
+      toast.error('Failed to upload images');
     } finally {
       setUploadingImages(false);
     }

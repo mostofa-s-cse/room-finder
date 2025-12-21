@@ -52,9 +52,13 @@ export function PaymentTabs() {
     const fetchPaymentSchedules = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('/api/payments/schedules');
+        const response = await fetch('/api/payments/schedules', {
+          cache: 'no-store'
+        });
         
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error('API Error Response:', errorText);
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         
@@ -71,7 +75,8 @@ export function PaymentTabs() {
         }
       } catch (error) {
         console.error('Error fetching payment schedules:', error);
-        toast.error('Error loading payment schedules');
+        const errorMessage = error instanceof Error ? error.message : 'Error loading payment schedules';
+        toast.error(errorMessage);
       } finally {
         setIsLoading(false);
       }
@@ -85,10 +90,33 @@ export function PaymentTabs() {
     setIsModalOpen(true);
   };
 
-  const handlePaymentSuccess = () => {
-    setIsModalOpen(false);
-    // Refresh payment schedules
-    window.location.reload();
+  const handlePaymentSuccess = async () => {
+    try {
+      setIsModalOpen(false);
+      setIsLoading(true);
+      
+      // Refresh payment schedules
+      const response = await fetch('/api/payments/schedules');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+
+      if (data.success) {
+        setPaymentSchedules(data.data || []);
+        toast.success('Payment completed successfully!');
+      } else {
+        console.error('Failed to reload payment schedules:', data.error);
+        toast.error('Payment completed but failed to refresh data. Please reload the page.');
+      }
+    } catch (error) {
+      console.error('Error refreshing payment schedules:', error);
+      toast.error('Payment completed but failed to refresh data. Please reload the page.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getOverdueCount = () => {

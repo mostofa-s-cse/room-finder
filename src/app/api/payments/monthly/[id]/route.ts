@@ -55,10 +55,27 @@ export async function PUT(
       },
     });
 
+    console.log('Payment updated successfully:', { 
+      id: updated.id, 
+      status: updated.status, 
+      paymentMethod: updated.paymentMethod 
+    });
+
+    // Serialize dates to ISO strings for JSON response
+    const serializedData = {
+      ...updated,
+      dueDate: updated.dueDate.toISOString(),
+      periodStart: updated.periodStart.toISOString(),
+      periodEnd: updated.periodEnd.toISOString(),
+      paidAt: updated.paidAt ? updated.paidAt.toISOString() : null,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+
     return NextResponse.json({
       success: true,
       message: 'Payment status updated successfully',
-      data: updated,
+      data: serializedData,
     });
   } catch (error) {
     console.error('Error updating payment:', error);

@@ -75,7 +75,6 @@ export function PaymentManagementModal({
 
   const { initializePayment, isProcessing: isProcessingPayment } = useSSLCommerz({
     onSuccess: () => {
-      toast.success('Payment completed successfully!');
       onPaymentSuccess?.(selectedPayment!);
       setSelectedPayment(null);
       setPaymentMethod('card');
@@ -125,24 +124,26 @@ export function PaymentManagementModal({
 
     try {
       if (paymentMethod === 'cash') {
-        // For cash payment, mark as pending for landlord confirmation
+        // For cash payment, mark as completed immediately (cash on arrival)
         const response = await fetch(`/api/payments/monthly/${selectedPayment.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            status: 'PENDING_CONFIRMATION',
-            paymentMethod: 'cash',
+            status: 'PAID',
+            paymentMethod: 'CASH',
           }),
         });
 
-        if (response.ok) {
-          toast.success('Payment marked for cash on delivery');
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          // Add small delay to ensure database transaction is committed
+          await new Promise(resolve => setTimeout(resolve, 500));
           onPaymentSuccess?.(selectedPayment);
           setSelectedPayment(null);
           setPaymentMethod('card');
         } else {
-          const errorData = await response.json();
-          throw new Error(errorData.error?.message || 'Failed to process cash payment');
+          throw new Error(data.error?.message || 'Failed to process cash payment');
         }
       } else {
         // Validate required fields for online payment
